@@ -1290,7 +1290,9 @@ static void __queue_work(unsigned int cpu, struct workqueue_struct *wq,
 	trace_workqueue_queue_work(req_cpu, cwq, work);
 
 	if (WARN_ON(!list_empty(&work->entry))) {
-		spin_unlock(&gcwq->lock);
+
+		spin_unlock_irqrestore(&gcwq->lock, flags);
+
 		return;
 	}
 
