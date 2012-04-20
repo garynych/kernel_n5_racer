@@ -332,13 +332,9 @@ static int __cpuinit _cpu_up(unsigned int cpu, int tasks_frozen)
 
 	cpu_hotplug_begin();
 
-	idle = idle_thread_get(cpu);
-	if (IS_ERR(idle)) {
-		ret = PTR_ERR(idle);
-		goto out;
-	}
 
-	ret = smpboot_create_threads(cpu);
+	ret = smpboot_prepare(cpu);
+
 	if (ret)
 		goto out;
 
