@@ -1,11 +1,8 @@
 /*
  * Common SMP CPU bringup/teardown functions
  */
-<<<<<<< HEAD
 
-=======
 #include <linux/cpu.h>
->>>>>>> e4492b1... smpboot: Provide infrastructure for percpu hotplug threads
 #include <linux/err.h>
 #include <linux/smp.h>
 #include <linux/init.h>
@@ -18,6 +15,8 @@
 #include <linux/smpboot.h>
 
 #include "smpboot.h"
+
+#ifdef CONFIG_SMP
 
 #ifdef CONFIG_GENERIC_SMP_IDLE_THREAD
 /*
@@ -75,6 +74,9 @@ void __init idle_threads_init(void)
 	}
 }
 #endif
+
+
+#endif /* #ifdef CONFIG_SMP */
 
 
 static LIST_HEAD(hotplug_threads);
