@@ -261,6 +261,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen)
 				__func__, cpu);
 		goto out_release;
 	}
+	smpboot_park_threads(cpu);
 
 	smpboot_park_threads(cpu);
 
@@ -338,6 +339,10 @@ static int __cpuinit _cpu_up(unsigned int cpu, int tasks_frozen)
 		ret = PTR_ERR(idle);
 		goto out;
 	}
+
+	ret = smpboot_create_threads(cpu);
+	if (ret)
+		goto out;
 
 	ret = __cpu_notify(CPU_UP_PREPARE | mod, hcpu, -1, &nr_calls);
 	if (ret) {
