@@ -42,6 +42,8 @@
 #include <linux/lockdep.h>
 #include <linux/idr.h>
 #include <linux/bug.h>
+#include <linux/moduleparam.h>
+#include <linux/hashtable.h>
 
 #include "workqueue_sched.h"
 
@@ -1248,11 +1250,11 @@ static void worker_leave_idle(struct worker *worker)
  * verbatim as it's best effort and blocking and gcwq may be
  * [dis]associated in the meantime.
  *
- * This function tries set_cpus_allowed() and locks gcwq and verifies
- * the binding against GCWQ_DISASSOCIATED which is set during
- * CPU_DYING and cleared during CPU_ONLINE, so if the worker enters
- * idle state or fetches works without dropping lock, it can guarantee
- * the scheduling requirement described in the first paragraph.
+ * This function tries set_cpus_allowed() and locks gcwq and verifies the
+ * binding against %GCWQ_DISASSOCIATED which is set during
+ * %CPU_DOWN_PREPARE and cleared during %CPU_ONLINE, so if the worker
+ * enters idle state or fetches works without dropping lock, it can
+ * guarantee the scheduling requirement described in the first paragraph.
  *
  * CONTEXT:
  * Might sleep.  Called without any lock but returns with gcwq->lock
@@ -3343,6 +3345,12 @@ static int __cpuinit trustee_thread(void *__gcwq)
 	rc = trustee_wait_event(!gcwq_is_managing_workers(gcwq));
 	BUG_ON(rc < 0);
 
+	/*
+	 * We've claimed all manager positions.  Make all workers unbound
+	 * and set DISASSOCIATED.  Before this, all workers except for the
+	 * ones which are still executing works from before the last CPU
+	 * down must be on the cpu.  After this, they may become diasporas.
+	 */
 	for_each_worker_pool(pool, gcwq) {
 		pool->flags |= POOL_MANAGING_WORKERS;
 
@@ -3352,6 +3360,8 @@ static int __cpuinit trustee_thread(void *__gcwq)
 
 	for_each_busy_worker(worker, i, pos, gcwq)
 		worker->flags |= WORKER_ROGUE;
+
+	gcwq->flags |= GCWQ_DISASSOCIATED;
 
 	/*
 	 * Call schedule() so that we cross rq->lock and thus can
@@ -3576,16 +3586,6 @@ static int __devinit workqueue_cpu_callback(struct notifier_block *nfb,
 		}
 		break;
 
-	case CPU_DYING:
-		/*
-		 * Before this, the trustee and all workers except for
-		 * the ones which are still executing works from
-		 * before the last CPU down must be on the cpu.  After
-		 * this, they'll all be diasporas.
-		 */
-		gcwq->flags |= GCWQ_DISASSOCIATED;
-		break;
-
 	case CPU_POST_DEAD:
 		gcwq->trustee_state = TRUSTEE_BUTCHER;
 		/* fall through */
@@ -3637,6 +3637,42 @@ err_destroy:
 
 	return NOTIFY_BAD;
 }
+
+
+/*
+ * Workqueues should be brought up before normal priority CPU notifiers.
+ * This will be registered high priority CPU notifier.
+ */
+static int __devinit workqueue_cpu_up_callback(struct notifier_block *nfb,
+					       unsigned long action,
+					       void *hcpu)
+{
+	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_UP_PREPARE:
+	case CPU_UP_CANCELED:
+	case CPU_DOWN_FAILED:
+	case CPU_ONLINE:
+		return workqueue_cpu_callback(nfb, action, hcpu);
+	}
+	return NOTIFY_OK;
+}
+
+/*
+ * Workqueues should be brought down after normal priority CPU notifiers.
+ * This will be registered as low priority CPU notifier.
+ */
+static int __devinit workqueue_cpu_down_callback(struct notifier_block *nfb,
+						 unsigned long action,
+						 void *hcpu)
+{
+	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_DOWN_PREPARE:
+	case CPU_POST_DEAD:
+		return workqueue_cpu_callback(nfb, action, hcpu);
+	}
+	return NOTIFY_OK;
+}
+
 
 #ifdef CONFIG_SMP
 
