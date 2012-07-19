@@ -535,10 +535,9 @@ static void insert_kthread_work(struct kthread_worker *worker,
 	lockdep_assert_held(&worker->lock);
 
 	list_add_tail(&work->node, pos);
-	work->worker = worker;
 
+	work->queue_seq++;
 	if (likely(worker->task))
-
 		wake_up_process(worker->task);
 }
 
@@ -613,12 +612,6 @@ retry:
 	else
 		noop = true;
 
-	spin_unlock_irq(&worker->lock);
-
-	if (!noop)
-		wait_for_completion(&fwork.done);
-}
-EXPORT_SYMBOL_GPL(flush_kthread_work);
 
 /**
  * flush_kthread_worker - flush all current works on a kthread_worker
