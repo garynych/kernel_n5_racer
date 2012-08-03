@@ -133,16 +133,18 @@ struct execute_work {
 	__WORK_INIT_LOCKDEP_MAP(#n, &(n))				\
 	}
 
-#define __DELAYED_WORK_INITIALIZER(n, f) {				\
-	.work = __WORK_INITIALIZER((n).work, (f)),			\
-	.timer = TIMER_INITIALIZER(delayed_work_timer_fn,		\
-				0, (unsigned long)&(n)),		\
+
+#define __DELAYED_WORK_INITIALIZER(n, f) {			\
+	.work = __WORK_INITIALIZER((n).work, (f)),		\
+	.timer = TIMER_INITIALIZER(delayed_work_timer_fn,	\
+				0, (unsigned long)&(n)),	\
 	}
 
-#define __DEFERRED_WORK_INITIALIZER(n, f) {				\
-	.work = __WORK_INITIALIZER((n).work, (f)),			\
-	.timer = TIMER_DEFERRED_INITIALIZER(delayed_work_timer_fn,	\
-				0, (unsigned long)&(n)),		\
+#define __DEFERRED_WORK_INITIALIZER(n, f) {			\
+	.work = __WORK_INITIALIZER((n).work, (f)),		\
+	.timer = TIMER_DEFERRED_INITIALIZER(delayed_work_timer_fn, \
+				0, (unsigned long)&(n)),	\
+
 	}
 
 #define DECLARE_WORK(n, f)						\
@@ -216,28 +218,30 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 		__INIT_WORK((_work), (_func), 1);			\
 	} while (0)
 
-#define INIT_DELAYED_WORK(_work, _func)					\
-	do {								\
-		INIT_WORK(&(_work)->work, (_func));			\
-		init_timer(&(_work)->timer);				\
-		(_work)->timer.function = delayed_work_timer_fn;	\
-		(_work)->timer.data = (unsigned long)(_work);		\
+
+#define INIT_DELAYED_WORK(_work, _func)				\
+	do {							\
+		INIT_WORK(&(_work)->work, (_func));		\
+		init_timer(&(_work)->timer);			\
+		(_work)->timer.function = delayed_work_timer_fn;\
+		(_work)->timer.data = (unsigned long)(_work);	\
 	} while (0)
 
-#define INIT_DELAYED_WORK_ONSTACK(_work, _func)				\
-	do {								\
-		INIT_WORK_ONSTACK(&(_work)->work, (_func));		\
-		init_timer_on_stack(&(_work)->timer);			\
-		(_work)->timer.function = delayed_work_timer_fn;	\
-		(_work)->timer.data = (unsigned long)(_work);		\
+#define INIT_DELAYED_WORK_ONSTACK(_work, _func)			\
+	do {							\
+		INIT_WORK_ONSTACK(&(_work)->work, (_func));	\
+		init_timer_on_stack(&(_work)->timer);		\
+		(_work)->timer.function = delayed_work_timer_fn;\
+		(_work)->timer.data = (unsigned long)(_work);	\
 	} while (0)
 
-#define INIT_DELAYED_WORK_DEFERRABLE(_work, _func)			\
-	do {								\
-		INIT_WORK(&(_work)->work, (_func));			\
-		init_timer_deferrable(&(_work)->timer);			\
-		(_work)->timer.function = delayed_work_timer_fn;	\
-		(_work)->timer.data = (unsigned long)(_work);		\
+#define INIT_DELAYED_WORK_DEFERRABLE(_work, _func)		\
+	do {							\
+		INIT_WORK(&(_work)->work, (_func));		\
+		init_timer_deferrable(&(_work)->timer);		\
+		(_work)->timer.function = delayed_work_timer_fn;\
+		(_work)->timer.data = (unsigned long)(_work);	\
+
 	} while (0)
 
 /**
