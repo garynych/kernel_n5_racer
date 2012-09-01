@@ -1321,14 +1321,10 @@ void delayed_work_timer_fn(unsigned long __data)
 	struct delayed_work *dwork = (struct delayed_work *)__data;
 	struct cpu_workqueue_struct *cwq = get_work_cwq(&dwork->work);
 
-<<<<<<< HEAD
-	local_irq_disable();
-	__queue_work(dwork->cpu, cwq->wq, &dwork->work);
-	local_irq_enable();
-=======
+
 	if (cwq != NULL)
 		__queue_work(smp_processor_id(), cwq->wq, &dwork->work);
->>>>>>> 085710bd... workqueue: Added null check and warning
+
 }
 EXPORT_SYMBOL_GPL(delayed_work_timer_fn);
 
@@ -2323,12 +2319,10 @@ __acquires(&gcwq->lock)
 	if (unlikely(in_atomic() || lockdep_depth(current) > 0)) {
 		pr_err("BUG: workqueue leaked lock or atomic: %s/0x%08x/%d\n"
 		       "     last function: %pf\n",
-<<<<<<< HEAD
-		       current->comm, preempt_count(), task_pid_nr(current), f);
-=======
+
 		       current->comm, preempt_count(), task_pid_nr(current),
 		       worker->current_func);
->>>>>>> b876777... workqueue: consider work function when searching for busy work items
+
 		debug_show_held_locks(current);
 		BUG_ON(PANIC_CORRUPTION);
 		dump_stack();
@@ -3722,7 +3716,45 @@ static void gcwq_unbind_fn(struct work_struct *work)
 	 * didn't already.
 	 */
 	for_each_worker_pool(pool, gcwq)
-		atomic_set(get_pool_nr_running(pool), 0);
+
+		WARN_ON(!list_empty(&pool->idle_list));
+
+	for_each_busy_worker(worker, i, pos, gcwq) {
+		struct work_struct *rebind_work = &worker->rebind_work;
+		unsigned long worker_flags = worker->flags;
+
+		/*
+		 * Rebind_work may race with future cpu hotplug
+		 * operations.  Use a separate flag to mark that
+		 * rebinding is scheduled.  The morphing should
+		 * be atomic.
+		 */
+		worker_flags |= WORKER_REBIND;
+		worker_flags &= ~WORKER_ROGUE;
+		ACCESS_ONCE(worker->flags) = worker_flags;
+
+		/* queue rebind_work, wq doesn't matter, use the default one */
+		if (test_and_set_bit(WORK_STRUCT_PENDING_BIT,
+				     work_data_bits(rebind_work)))
+			continue;
+
+		debug_work_activate(rebind_work);
+		insert_work(get_cwq(gcwq->cpu, system_wq), rebind_work,
+			    worker->scheduled.next,
+			    work_color_to_flags(WORK_NO_COLOR));
+	}
+
+	/* relinquish manager role */
+	for_each_worker_pool(pool, gcwq)
+		pool->flags &= ~POOL_MANAGING_WORKERS;
+
+	/* notify completion */
+	gcwq->trustee = NULL;
+	gcwq->trustee_state = TRUSTEE_DONE;
+	wake_up_all(&gcwq->trustee_wait);
+	spin_unlock_irq(&gcwq->lock);
+	return 0;
+>>>>>>> f3c4bda... workqueue: UNBOUND -> REBIND morphing in rebind_workers() should be atomic
 }
 
 /*
