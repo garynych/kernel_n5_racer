@@ -1365,31 +1365,15 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	struct work_struct *work = &dwork->work;
 	unsigned int lcpu;
 
-	WARN_ON_ONCE(timer->function != delayed_work_timer_fn ||
-		     timer->data != (unsigned long)dwork);
-	WARN_ON_ONCE(timer_pending(timer));
-	WARN_ON_ONCE(!list_empty(&work->entry));
 
-	/*
-	 * If @delay is 0, queue @dwork->work immediately.  This is for
-	 * both optimization and correctness.  The earliest @timer can
-	 * expire is on the closest next tick and delayed_work users depend
-	 * on that there's no such delay when @delay is 0.
-	 */
-	if (!delay) {
-		__queue_work(cpu, wq, &dwork->work);
-		return;
-	}
+	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
+		unsigned int lcpu;
 
-	timer_stats_timer_set_start_info(&dwork->timer);
+		WARN_ON_ONCE(timer_pending(timer));
+		WARN_ON_ONCE(!list_empty(&work->entry));
 
-	/*
-	 * This stores cwq for the moment, for the timer_fn.  Note that the
-	 * work's gcwq is preserved to allow reentrance detection for
-	 * delayed works.
-	 */
-	if (!(wq->flags & WQ_UNBOUND)) {
-		struct global_cwq *gcwq = get_work_gcwq(work);
+		timer_stats_timer_set_start_info(&dwork->timer);
+
 
 		/*
 		 * If we cannot get the last gcwq from @work directly,
