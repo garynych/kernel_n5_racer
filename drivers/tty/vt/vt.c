@@ -3248,6 +3248,8 @@ int do_unbind_con_driver(const struct consw *csw, int first, int last, int deflt
 
 	/* ignore return value, binding should not fail */
 	do_bind_con_driver(defcsw, first, last, deflt);
+
+	console_unlock();
 err:
 	module_put(owner);
 	return retval;
