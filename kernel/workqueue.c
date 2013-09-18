@@ -592,7 +592,10 @@ static struct cpu_workqueue_struct *get_work_cwq(struct work_struct *work)
 	if (data & WORK_STRUCT_CWQ)
 		return (void *)(data & WORK_STRUCT_WQ_DATA_MASK);
 	else
+	{
+		WARN_ON_ONCE(1);
 		return NULL;
+	}
 }
 
 static struct global_cwq *get_work_gcwq(struct work_struct *work)
@@ -1372,9 +1375,14 @@ void delayed_work_timer_fn(unsigned long __data)
 	struct delayed_work *dwork = (struct delayed_work *)__data;
 	struct cpu_workqueue_struct *cwq = get_work_cwq(&dwork->work);
 
+<<<<<<< HEAD
 	local_irq_disable();
 	__queue_work(dwork->cpu, cwq->wq, &dwork->work);
 	local_irq_enable();
+=======
+	if (cwq != NULL)
+		__queue_work(smp_processor_id(), cwq->wq, &dwork->work);
+>>>>>>> 085710bd... workqueue: Added null check and warning
 }
 EXPORT_SYMBOL_GPL(delayed_work_timer_fn);
 
