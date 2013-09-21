@@ -886,7 +886,13 @@ static size_t account(struct entropy_store *r, size_t nbytes, int min,
 static void extract_buf(struct entropy_store *r, __u8 *out)
 {
 	int i;
-	__u32 hash[5], workspace[SHA_WORKSPACE_WORDS];
+
+	union {
+		__u32 w[5];
+		unsigned long l[LONGS(20)];
+	} hash;
+	__u32 workspace[SHA_WORKSPACE_WORDS];
+
 	__u8 extract[64];
 	unsigned long flags;
 
@@ -895,6 +901,17 @@ static void extract_buf(struct entropy_store *r, __u8 *out)
 	spin_lock_irqsave(&r->lock, flags);
 	for (i = 0; i < r->poolinfo->poolwords; i += 16)
 		sha_transform(hash, (__u8 *)(r->pool + i), workspace);
+
+	/*
+	 * If we have a architectural hardware random number
+	 * generator, mix that in, too.
+	 */
+	for (i = 0; i < LONGS(20); i++) {
+		unsigned long v;
+		if (!arch_get_random_long(&v))
+			break;
+		hash.l[i] ^= v;
+	}
 
 	/*
 	 * We mix the hash back into the pool to prevent backtracking
@@ -921,11 +938,14 @@ static void extract_buf(struct entropy_store *r, __u8 *out)
 	 * pattern, we fold it in half. Thus, we always feed back
 	 * twice as much data as we output.
 	 */
-	hash[0] ^= hash[3];
-	hash[1] ^= hash[4];
-	hash[2] ^= rol32(hash[2], 16);
-	memcpy(out, hash, EXTRACT_SIZE);
-	memset(hash, 0, sizeof(hash));
+
+	hash.w[0] ^= hash.w[3];
+	hash.w[1] ^= hash.w[4];
+	hash.w[2] ^= rol32(hash.w[2], 16);
+
+	memcpy(out, &hash, EXTRACT_SIZE);
+	memset(&hash, 0, sizeof(hash));
+
 }
 
 static ssize_t extract_entropy(struct entropy_store *r, void *buf,
