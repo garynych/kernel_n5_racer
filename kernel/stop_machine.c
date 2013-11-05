@@ -300,12 +300,11 @@ repeat:
 
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 
-static void cpu_stop_create(unsigned int cpu)
-{
-	sched_set_stop_task(cpu, per_cpu(cpu_stopper_task, cpu));
-}
 
-static void cpu_stop_park(unsigned int cpu)
+/* manage stopper for a cpu, mostly lifted from sched migration thread mgmt */
+static int cpu_stop_cpu_callback(struct notifier_block *nfb,
+					   unsigned long action, void *hcpu)
+
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
 
