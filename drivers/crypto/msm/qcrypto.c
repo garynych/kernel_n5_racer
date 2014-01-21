@@ -1,6 +1,6 @@
 /* Qualcomm Crypto driver
  *
- * Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3275,6 +3275,16 @@ static int _sha256_hmac_digest(struct ahash_request *req)
 	return _sha_digest(req);
 }
 
+static int _qcrypto_prefix_alg_cra_name(char cra_name[], unsigned int size)
+{
+	char new_cra_name[CRYPTO_MAX_ALG_NAME] = "qcom-";
+	if (CRYPTO_MAX_ALG_NAME < size + 5)
+		return -EINVAL;
+	strlcat(new_cra_name, cra_name, CRYPTO_MAX_ALG_NAME);
+	strlcpy(cra_name, new_cra_name, CRYPTO_MAX_ALG_NAME);
+	return 0;
+}
+
 int qcrypto_cipher_set_flag(struct ablkcipher_request *req, unsigned int flags)
 {
 	struct qcrypto_cipher_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
@@ -3912,6 +3922,17 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 			rc = PTR_ERR(q_alg);
 			goto err;
 		}
+		if (cp->ce_support.use_sw_aes_cbc_ecb_ctr_algo) {
+			rc = _qcrypto_prefix_alg_cra_name(
+					q_alg->cipher_alg.cra_name,
+					strlen(q_alg->cipher_alg.cra_name));
+			if (rc) {
+				dev_err(&pdev->dev,
+					"The algorithm name %s is too long.\n",
+					q_alg->cipher_alg.cra_name);
+				goto err;
+			}
+		}
 		rc = crypto_register_alg(&q_alg->cipher_alg);
 		if (rc) {
 			dev_err(&pdev->dev, "%s alg registration failed\n",
@@ -3933,6 +3954,17 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 		if (IS_ERR(q_alg)) {
 			rc = PTR_ERR(q_alg);
 			goto err;
+		}
+		if (cp->ce_support.use_sw_aes_xts_algo) {
+			rc = _qcrypto_prefix_alg_cra_name(
+					q_alg->cipher_alg.cra_name,
+					strlen(q_alg->cipher_alg.cra_name));
+			if (rc) {
+				dev_err(&pdev->dev,
+					"The algorithm name %s is too long.\n",
+					q_alg->cipher_alg.cra_name);
+				goto err;
+			}
 		}
 		rc = crypto_register_alg(&q_alg->cipher_alg);
 		if (rc) {
@@ -3959,7 +3991,17 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 			rc = PTR_ERR(q_alg);
 			goto err;
 		}
-
+		if (cp->ce_support.use_sw_ahash_algo) {
+			rc = _qcrypto_prefix_alg_cra_name(
+				q_alg->sha_alg.halg.base.cra_name,
+				strlen(q_alg->sha_alg.halg.base.cra_name));
+			if (rc) {
+				dev_err(&pdev->dev,
+					"The algorithm name %s is too long.\n",
+					q_alg->sha_alg.halg.base.cra_name);
+				goto err;
+			}
+		}
 		rc = crypto_register_ahash(&q_alg->sha_alg);
 		if (rc) {
 			dev_err(&pdev->dev, "%s alg registration failed\n",
@@ -3985,7 +4027,17 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				rc = PTR_ERR(q_alg);
 				goto err;
 			}
-
+			if (cp->ce_support.use_sw_aead_algo) {
+				rc = _qcrypto_prefix_alg_cra_name(
+					q_alg->cipher_alg.cra_name,
+					strlen(q_alg->cipher_alg.cra_name));
+				if (rc) {
+					dev_err(&pdev->dev,
+						"The algorithm name %s is too long.\n",
+						q_alg->cipher_alg.cra_name);
+					goto err;
+				}
+			}
 			rc = crypto_register_alg(&q_alg->cipher_alg);
 			if (rc) {
 				dev_err(&pdev->dev,
@@ -4012,7 +4064,18 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				rc = PTR_ERR(q_alg);
 				goto err;
 			}
-
+			if (cp->ce_support.use_sw_hmac_algo) {
+				rc = _qcrypto_prefix_alg_cra_name(
+					q_alg->sha_alg.halg.base.cra_name,
+					strlen(
+					q_alg->sha_alg.halg.base.cra_name));
+				if (rc) {
+					dev_err(&pdev->dev,
+					     "The algorithm name %s is too long.\n",
+					     q_alg->sha_alg.halg.base.cra_name);
+					goto err;
+				}
+			}
 			rc = crypto_register_ahash(&q_alg->sha_alg);
 			if (rc) {
 				dev_err(&pdev->dev,
@@ -4037,6 +4100,17 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 		if (IS_ERR(q_alg)) {
 			rc = PTR_ERR(q_alg);
 			goto err;
+		}
+		if (cp->ce_support.use_sw_aes_ccm_algo) {
+			rc = _qcrypto_prefix_alg_cra_name(
+					q_alg->cipher_alg.cra_name,
+					strlen(q_alg->cipher_alg.cra_name));
+			if (rc) {
+				dev_err(&pdev->dev,
+						"The algorithm name %s is too long.\n",
+						q_alg->cipher_alg.cra_name);
+				goto err;
+			}
 		}
 		rc = crypto_register_alg(&q_alg->cipher_alg);
 		if (rc) {
