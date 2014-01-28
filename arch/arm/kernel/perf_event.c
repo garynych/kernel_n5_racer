@@ -886,21 +886,6 @@ static int pmu_cpu_notify(struct notifier_block *b,
 {
 	int irq;
 	struct pmu *pmu;
-	int cpu = (int)hcpu;
-
-	switch ((action & ~CPU_TASKS_FROZEN)) {
-	case CPU_DOWN_PREPARE:
-		if (cpu_pmu && cpu_pmu->save_pm_registers)
-			smp_call_function_single(cpu,
-						 cpu_pmu->save_pm_registers,
-						 hcpu, 1);
-		break;
-	case CPU_STARTING:
-		if (cpu_pmu && cpu_pmu->restore_pm_registers)
-			smp_call_function_single(cpu,
-						 cpu_pmu->restore_pm_registers,
-						 hcpu, 1);
-	}
 
 	if (cpu_has_active_perf((int)hcpu)) {
 		switch ((action & ~CPU_TASKS_FROZEN)) {
@@ -948,7 +933,9 @@ static int pmu_cpu_notify(struct notifier_block *b,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block pmu_cpu_notifier = {
+
+static struct notifier_block __cpuinitdata pmu_cpu_notifier = {
+
 	.notifier_call = pmu_cpu_notify,
 };
 
