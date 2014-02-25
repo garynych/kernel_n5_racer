@@ -4127,6 +4127,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev,
 					"The algorithm name %s is too long.\n",
 					q_alg->cipher_alg.cra_name);
+				kfree(q_alg);
 				goto err;
 			}
 		}
@@ -4160,6 +4161,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev,
 					"The algorithm name %s is too long.\n",
 					q_alg->cipher_alg.cra_name);
+				kfree(q_alg);
 				goto err;
 			}
 		}
@@ -4196,6 +4198,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev,
 					"The algorithm name %s is too long.\n",
 					q_alg->sha_alg.halg.base.cra_name);
+				kfree(q_alg);
 				goto err;
 			}
 		}
@@ -4232,6 +4235,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 					dev_err(&pdev->dev,
 						"The algorithm name %s is too long.\n",
 						q_alg->cipher_alg.cra_name);
+					kfree(q_alg);
 					goto err;
 				}
 			}
@@ -4270,6 +4274,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 					dev_err(&pdev->dev,
 					     "The algorithm name %s is too long.\n",
 					     q_alg->sha_alg.halg.base.cra_name);
+					kfree(q_alg);
 					goto err;
 				}
 			}
@@ -4306,6 +4311,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev,
 						"The algorithm name %s is too long.\n",
 						q_alg->cipher_alg.cra_name);
+				kfree(q_alg);
 				goto err;
 			}
 		}
