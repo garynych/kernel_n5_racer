@@ -308,53 +308,9 @@ static void cpu_stop_create(unsigned int cpu)
 static void cpu_stop_park(unsigned int cpu)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
-	struct task_struct *p = per_cpu(cpu_stopper_task, cpu);
-	switch (action & ~CPU_TASKS_FROZEN) {
-	case CPU_UP_PREPARE:
-		BUG_ON(p || stopper->enabled || !list_empty(&stopper->works));
-		p = kthread_create_on_node(cpu_stopper_thread,
-					   stopper,
-					   cpu_to_node(cpu),
-					   "migration/%d", cpu);
-		if (IS_ERR(p))
-			return notifier_from_errno(PTR_ERR(p));
-		get_task_struct(p);
-		kthread_bind(p, cpu);
-		sched_set_stop_task(cpu, p);
-		per_cpu(cpu_stopper_task, cpu) = p;
-		break;
 
-	case CPU_ONLINE:
-		/* strictly unnecessary, as first user will wake it */
-		wake_up_process(p);
-		/* mark enabled */
-		spin_lock_irq(&stopper->lock);
-		stopper->enabled = true;
-		spin_unlock_irq(&stopper->lock);
-		break;
-
-#ifdef CONFIG_HOTPLUG_CPU
-	case CPU_UP_CANCELED:
-	case CPU_POST_DEAD:
-	{
-		struct cpu_stop_work *work;
-
-		sched_set_stop_task(cpu, NULL);
-		/* kill the stopper */
-		kthread_stop(p);
-		/* drain remaining works */
-		spin_lock_irq(&stopper->lock);
-		list_for_each_entry(work, &stopper->works, list)
-			cpu_stop_signal_done(work->done, false);
-		stopper->enabled = false;
-		spin_unlock_irq(&stopper->lock);
-		/* release the stopper */
-		put_task_struct(p);
-		per_cpu(cpu_stopper_task, cpu) = NULL;
-		break;
-	}
-#endif
-	}
+	struct cpu_stop_work *work;
+	unsigned long flags;
 
 	/* drain remaining works */
 	spin_lock_irqsave(&stopper->lock, flags);
@@ -373,6 +329,7 @@ static void cpu_stop_unpark(unsigned int cpu)
 	spin_unlock_irq(&stopper->lock);
 }
 
+
 static struct smp_hotplug_thread cpu_stop_threads = {
 	.store			= &cpu_stopper_task,
 	.thread_should_run	= cpu_stop_should_run,
@@ -381,7 +338,7 @@ static struct smp_hotplug_thread cpu_stop_threads = {
 	.create			= cpu_stop_create,
 	.setup			= cpu_stop_unpark,
 	.park			= cpu_stop_park,
-	.pre_unpark		= cpu_stop_unpark,
+	.unpark			= cpu_stop_unpark,
 	.selfparking		= true,
 };
 
