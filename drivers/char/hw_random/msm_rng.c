@@ -27,6 +27,9 @@
 #include <mach/msm_iomap.h>
 #include <mach/socinfo.h>
 #include <mach/msm_bus.h>
+#include <linux/qrng.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
 
 #include <linux/platform_data/qcom_crypto_device.h>
 
@@ -415,6 +418,9 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 	struct msm_rng_device *msm_rng_dev = NULL;
 	void __iomem *base = NULL;
 	int error = 0;
+	int ret = 0;
+	struct device *dev;
+
 	struct msm_bus_scale_pdata *qrng_platform_support = NULL;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -469,6 +475,8 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 		qrng_platform_support = msm_bus_cl_get_pdata(pdev);
 		msm_rng_dev->qrng_perf_client = msm_bus_scale_register_client(
 						qrng_platform_support);
+		msm_rng_device_info.qrng_perf_client =
+					msm_rng_dev->qrng_perf_client;
 		if (!msm_rng_dev->qrng_perf_client)
 			pr_err("Unable to register bus client\n");
 	}
@@ -487,7 +495,13 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 		error = -EPERM;
 		goto rollback_clk;
 	}
+	ret = register_chrdev(QRNG_IOC_MAGIC, DRIVER_NAME, &msm_rng_fops);
 
+	msm_rng_class = class_create(THIS_MODULE, "msm-rng");
+	if (IS_ERR(msm_rng_class)) {
+		pr_err("class_create failed\n");
+		return PTR_ERR(msm_rng_class);
+	}
 
 	dev = device_create(msm_rng_class, NULL, MKDEV(QRNG_IOC_MAGIC, 0),
 				NULL, "msm-rng");
@@ -504,7 +518,8 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 
 	return error;
 
-
+unregister_chrdev:
+	unregister_chrdev(QRNG_IOC_MAGIC, DRIVER_NAME);
 rollback_clk:
 	clk_put(msm_rng_dev->prng_clk);
 err_clk_get:
