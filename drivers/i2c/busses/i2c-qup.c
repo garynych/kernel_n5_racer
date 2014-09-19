@@ -1792,8 +1792,7 @@ static int i2c_qup_pm_resume_runtime(struct device *device)
 {
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
-	dev_dbg(device, "pm_runtime: resuming...\n")
-
+	dev_dbg(device, "pm_runtime: resuming...\n");
 	i2c_qup_pm_resume(dev);
 	return 0;
 }
