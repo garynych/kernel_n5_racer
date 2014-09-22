@@ -3030,7 +3030,6 @@ config MSM_SLEEPER
 	help
 	  Limit max frequency while screen is off 
 
-
 config MSM_UARTDM_Core_v14
 	bool "Use MSM BLSP based HSUART Core v1.4"
 	depends on SERIAL_MSM_HS
