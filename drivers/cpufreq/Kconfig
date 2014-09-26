@@ -67,6 +67,15 @@ config CPU_FREQ_DEFAULT_GOV_POWERSAVE
 	  the frequency statically to the lowest frequency supported by
 	  the CPU.
 
+config CPU_FREQ_DEFAULT_GOV_RACER_PS
+	bool "racerps"
+	depends on EXPERT
+	select CPU_FREQ_GOV_POWERSAVE
+		help
+		  The CPUFreq governor 'racerps' sets
+		  the frequency to a fixed value supported by CPU
+
+
 config CPU_FREQ_DEFAULT_GOV_USERSPACE
 	bool "userspace"
 	select CPU_FREQ_GOV_USERSPACE
@@ -152,6 +161,16 @@ config CPU_FREQ_GOV_POWERSAVE
 	  module will be called cpufreq_powersave.
 
 	  If in doubt, say Y.
+
+config CPU_FREQ_GOV_RACER_PS
+	tristate "'racerps' governor"
+	help
+	This cpufreq governor sets the frequency to fixed low, available CPU frequency.
+
+	To compile this driver as a module, choose M here: the
+	module will be called cpufreq_racerps.
+
+	If in doubt, say Y.
 
 config CPU_FREQ_GOV_USERSPACE
 	tristate "'userspace' governor for userspace frequency scaling"
