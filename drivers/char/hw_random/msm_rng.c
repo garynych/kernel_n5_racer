@@ -27,6 +27,11 @@
 #include <mach/msm_iomap.h>
 #include <mach/socinfo.h>
 #include <mach/msm_bus.h>
+#include <linux/qrng.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+
+
 
 #include <linux/platform_data/qcom_crypto_device.h>
 
