@@ -1,7 +1,5 @@
 /*
-
  * Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
-
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,8 +28,6 @@
 #include <linux/qrng.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-
-
 
 #include <linux/platform_data/qcom_crypto_device.h>
 
@@ -78,7 +74,6 @@ enum {
 	FIPS_NOT_STARTED = 0,
 	DRBG_FIPS_STARTED
 };
-
 
 struct msm_rng_device msm_rng_device_info;
 
@@ -158,7 +153,6 @@ int msm_rng_direct_read(struct msm_rng_device *msm_rng_dev, void *data)
 
 static int msm_rng_drbg_read(struct hwrng *rng,
 			void *data, size_t max, bool wait)
-
 {
 	struct msm_rng_device *msm_rng_dev;
 	struct platform_device *pdev;
@@ -199,12 +193,6 @@ static int msm_rng_drbg_read(struct hwrng *rng,
 		up(&msm_rng_dev->drbg_sem);
 		return 0;
 	}
-	if (msm_rng_dev->qrng_perf_client) {
-		ret = msm_bus_scale_client_update_request(
-					msm_rng_dev->qrng_perf_client, 1);
-		if (ret)
-			pr_err("bus_scale_client_update_req failed!\n");
-	}
 	/* read random data from h/w */
 	do {
 		/* check status bit if data is available */
@@ -225,9 +213,6 @@ static int msm_rng_drbg_read(struct hwrng *rng,
 		if ((maxsize - currsize) < 4)
 			break;
 	} while (currsize < maxsize);
-	if (msm_rng_dev->qrng_perf_client)
-		ret = msm_bus_scale_client_update_request(
-					msm_rng_dev->qrng_perf_client, 0);
 	/* vote to turn off clock */
 	clk_disable_unprepare(msm_rng_dev->prng_clk);
 
@@ -385,13 +370,8 @@ static int __devinit msm_rng_enable_hw(struct msm_rng_device *msm_rng_dev)
 		mb();
 	}
 	clk_disable_unprepare(msm_rng_dev->prng_clk);
-	if (msm_rng_dev->qrng_perf_client)
-		ret = msm_bus_scale_client_update_request(
-					msm_rng_dev->qrng_perf_client, 0);
-
 	return 0;
 }
-
 
 static const struct file_operations msm_rng_fops = {
 	.unlocked_ioctl = msm_rng_ioctl,
@@ -413,13 +393,15 @@ static void _first_msm_drbg_init(struct msm_rng_device *msm_rng_dev)
 }
 #endif
 
-
 static int __devinit msm_rng_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct msm_rng_device *msm_rng_dev = NULL;
 	void __iomem *base = NULL;
 	int error = 0;
+	int ret = 0;
+	struct device *dev;
+
 	struct msm_bus_scale_pdata *qrng_platform_support = NULL;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -474,6 +456,8 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 		qrng_platform_support = msm_bus_cl_get_pdata(pdev);
 		msm_rng_dev->qrng_perf_client = msm_bus_scale_register_client(
 						qrng_platform_support);
+		msm_rng_device_info.qrng_perf_client =
+					msm_rng_dev->qrng_perf_client;
 		if (!msm_rng_dev->qrng_perf_client)
 			pr_err("Unable to register bus client\n");
 	}
@@ -492,7 +476,13 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 		error = -EPERM;
 		goto rollback_clk;
 	}
+	ret = register_chrdev(QRNG_IOC_MAGIC, DRIVER_NAME, &msm_rng_fops);
 
+	msm_rng_class = class_create(THIS_MODULE, "msm-rng");
+	if (IS_ERR(msm_rng_class)) {
+		pr_err("class_create failed\n");
+		return PTR_ERR(msm_rng_class);
+	}
 
 	dev = device_create(msm_rng_class, NULL, MKDEV(QRNG_IOC_MAGIC, 0),
 				NULL, "msm-rng");
@@ -509,7 +499,8 @@ static int __devinit msm_rng_probe(struct platform_device *pdev)
 
 	return error;
 
-
+unregister_chrdev:
+	unregister_chrdev(QRNG_IOC_MAGIC, DRIVER_NAME);
 rollback_clk:
 	clk_put(msm_rng_dev->prng_clk);
 err_clk_get:
@@ -525,11 +516,9 @@ static int __devexit msm_rng_remove(struct platform_device *pdev)
 {
 	struct msm_rng_device *msm_rng_dev = platform_get_drvdata(pdev);
 
-
 	fips_drbg_final(msm_rng_dev->drbg_ctx);
 
 	unregister_chrdev(QRNG_IOC_MAGIC, DRIVER_NAME);
-
 	hwrng_unregister(&msm_rng);
 	clk_put(msm_rng_dev->prng_clk);
 	iounmap(msm_rng_dev->base);
