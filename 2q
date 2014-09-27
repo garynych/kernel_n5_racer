@@ -1,0 +1,18 @@
+rtc: alarm: have dummy set_power_on_alarm function
+
+When !CONFIG_RTC_CLASS we need to have a dummy set_power_on_alarm
+function. Otherwise, it is easy to have build issues.
+
+Change-Id: I39310241cc2e59f672964c8bc0ee4c3607aedf4e
+Signed-off-by: Maria Yu <aiquny@codeaurora.org>
+Signed-off-by: franciscofranco <franciscofranco.1990@gmail.com>
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# Author:    Maria Yu <aiquny@codeaurora.org>
+#
+# On branch test
+# Changes to be committed:
+#	modified:   kernel/time/alarmtimer.c
+#
