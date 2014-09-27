@@ -19,13 +19,13 @@
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/of_device.h>
+#include <asm/arch_timer.h>
+#include <linux/uaccess.h>
 
 #include <linux/msm_dsps.h>
 #include <linux/uaccess.h>
 
 #define CLASS_NAME	"ssc"
-
-
 #define DRV_NAME	"sensors"
 #define DRV_VERSION	"2.00"
 
