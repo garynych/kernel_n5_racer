@@ -24,8 +24,20 @@
 #define INTELLI_PLUG_MAJOR_VERSION	1
 #define INTELLI_PLUG_MINOR_VERSION	4
 
+<<<<<<< HEAD
 #define DEF_SAMPLING_RATE		(50000)
 #define DEF_SAMPLING_MS			(50)
+=======
+#define INTELLI_PLUG_MAJOR_VERSION	1
+#define INTELLI_PLUG_MINOR_VERSION	5
+
+#define DEF_SAMPLING_RATE		(50000)
+#define DEF_SAMPLING_MS			(200)
+
+#define DUAL_CORE_PERSISTENCE		15
+#define TRI_CORE_PERSISTENCE		12
+#define QUAD_CORE_PERSISTENCE		10
+>>>>>>> db7523a... intelli_plug: slow down hotplug activity from 50ms to 200ms
 
 #define DUAL_CORE_PERSISTENCE		50
 #define TRI_CORE_PERSISTENCE		40
