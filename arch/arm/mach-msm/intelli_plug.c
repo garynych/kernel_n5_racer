@@ -36,17 +36,13 @@
 #define INTELLI_PLUG_MAJOR_VERSION	3
 #define INTELLI_PLUG_MINOR_VERSION	8
 
-
 #define DEF_SAMPLING_MS			(268)
-
 
 #define DUAL_PERSISTENCE		(2500 / DEF_SAMPLING_MS)
 #define TRI_PERSISTENCE			(1700 / DEF_SAMPLING_MS)
 #define QUAD_PERSISTENCE		(1000 / DEF_SAMPLING_MS)
 
-
 #define BUSY_PERSISTENCE		(3500 / DEF_SAMPLING_MS)
-
 
 static DEFINE_MUTEX(intelli_plug_mutex);
 
@@ -56,7 +52,7 @@ static struct delayed_work intelli_plug_boost;
 static struct workqueue_struct *intelliplug_wq;
 static struct workqueue_struct *intelliplug_boost_wq;
 
-static unsigned int intelli_plug_active = 1;
+static unsigned int intelli_plug_active = 0;
 module_param(intelli_plug_active, uint, 0644);
 
 static unsigned int touch_boost_active = 1;
@@ -202,7 +198,6 @@ static unsigned int calculate_thread_stats(void)
 
 	return nr_run;
 }
-
 
 static void __cpuinit intelli_plug_boost_fn(struct work_struct *work)
 {
@@ -401,7 +396,6 @@ static void intelli_plug_suspend(struct early_suspend *handler)
 	}
 }
 
-
 static void wakeup_boost(void)
 {
 	unsigned int cpu;
@@ -418,11 +412,9 @@ static void wakeup_boost(void)
 
 #ifdef CONFIG_POWERSUSPEND
 static void __cpuinit intelli_plug_resume(struct power_suspend *handler)
-
 #else
 static void __cpuinit intelli_plug_resume(struct early_suspend *handler)
 #endif
-
 {
 
 	if (intelli_plug_active) {
@@ -448,15 +440,12 @@ static void __cpuinit intelli_plug_resume(struct early_suspend *handler)
 }
 #endif
 
-
 #ifdef CONFIG_POWERSUSPEND
-
 static struct power_suspend intelli_plug_power_suspend_driver = {
 	.suspend = intelli_plug_suspend,
 	.resume = intelli_plug_resume,
 };
 #endif  /* CONFIG_POWERSUSPEND */
-
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static struct early_suspend intelli_plug_early_suspend_driver = {
@@ -465,7 +454,6 @@ static struct early_suspend intelli_plug_early_suspend_driver = {
         .resume = intelli_plug_resume,
 };
 #endif	/* CONFIG_HAS_EARLYSUSPEND */
-
 
 static void intelli_plug_input_event(struct input_handle *handle,
 		unsigned int type, unsigned int code, int value)
@@ -540,7 +528,6 @@ static struct input_handler intelli_plug_input_handler = {
 	.name           = "intelliplug_handler",
 	.id_table       = intelli_plug_ids,
 };
-
 
 int __init intelli_plug_init(void)
 {
