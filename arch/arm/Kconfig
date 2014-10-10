@@ -35,11 +35,8 @@ config ARM
 	select HAVE_BPF_JIT if NET
 	select GENERIC_STRNCPY_FROM_USER
 	select GENERIC_STRNLEN_USER
-<<<<<<< HEAD
+	select DCACHE_WORD_ACCESS if (CPU_V6 || CPU_V6K || CPU_V7) && MMU
 
-=======
-	select DCACHE_WORD_ACCESS if (CPU_V6 || CPU_V6K || CPU_V7) && !CPU_BIG_ENDIAN
->>>>>>> 56f0e12... ARM: 7450/1: dcache: select DCACHE_WORD_ACCESS for little-endian ARMv
 	help
 	  The ARM series is a line of low-power-consumption RISC chip designs
 	  licensed by ARM Ltd and targeted at embedded applications and
