@@ -1614,11 +1614,9 @@ static int __mdss_fb_display_thread(void *data)
 	if (ret)
 		pr_info("%s: set priority failed\n", __func__);
 
-	while (1) {
-
-		while (wait_event_interruptible(mfd->commit_wait_q,
+	while (1) {wait_event_interruptible(mfd->commit_wait_q,
 				(atomic_read(&mfd->commits_pending) ||
-				kthread_should_stop())) != 0);
+				kthread_should_stop()));
 
 		if (ret) {
 			pr_info("%s: interrupted", __func__);
