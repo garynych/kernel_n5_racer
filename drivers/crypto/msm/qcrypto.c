@@ -2668,6 +2668,7 @@ static int __sha256_import_common(struct ahash_request  *req, const void *in,
 	rctx->count = in_ctx->count;
 	memcpy(rctx->trailing_buf, in_ctx->buf, SHA256_BLOCK_SIZE);
 
+
 	if (in_ctx->count <= SHA256_BLOCK_SIZE) {
 		rctx->first_blk = 1;
 	} else {
@@ -2685,6 +2686,7 @@ static int __sha256_import_common(struct ahash_request  *req, const void *in,
 	rctx->byte_count[1] =  (uint32_t)(hw_count >> 32);
 	_words_to_byte_stream(in_ctx->state, rctx->digest, sha_ctx->diglen);
 
+ requests.
 	rctx->trailing_buf_len = (uint32_t)(in_ctx->count &
 						(SHA256_BLOCK_SIZE-1));
 
@@ -2916,9 +2918,8 @@ static int _sha_digest(struct ahash_request *req)
 	rctx->src = req->src;
 	rctx->nbytes = req->nbytes;
 
-	sha_ctx->first_blk = 1;
-	sha_ctx->last_blk = 1;
-
+	rctx->first_blk = 1;
+	rctx->last_blk = 1;
 	ret =  _qcrypto_queue_req(cp, sha_ctx->pengine, &req->base);
 
 	return ret;
@@ -3001,11 +3002,10 @@ static int _sha1_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
 							unsigned int len)
 {
 	struct qcrypto_sha_ctx *sha_ctx = crypto_tfm_ctx(&tfm->base);
-<<
 
 	memset(&sha_ctx->authkey[0], 0, SHA1_BLOCK_SIZE);
-	if (len <= SHA1_BLOCK_SIZE)
->>>
+	if (len <= SHA1_BLOCK_SIZE) {
+
 		memcpy(&sha_ctx->authkey[0], key, len);
 		sha_ctx->authkey_in_len = len;
 	} else {
@@ -3023,8 +3023,8 @@ static int _sha256_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
 	struct qcrypto_sha_ctx *sha_ctx = crypto_tfm_ctx(&tfm->base);
 
 	memset(&sha_ctx->authkey[0], 0, SHA256_BLOCK_SIZE);
-<
-	if (len <= SHA256_BLOCK_SIZE)
+
+	if (len <= SHA256_BLOCK_SIZE) {
 
 		memcpy(&sha_ctx->authkey[0], key, len);
 		sha_ctx->authkey_in_len = len;
@@ -3156,7 +3156,7 @@ static int _sha_hmac_outer_hash(struct ahash_request *req,
 	}
 
 
-	sha_ctx->last_blk = 1;
+	rctx->last_blk = 1;
 
 	return  _qcrypto_queue_req(cp, sha_ctx->pengine, &req->base);
 }
@@ -3178,9 +3178,9 @@ static int _sha_hmac_inner_hash(struct ahash_request *req,
 	sg_mark_end(&rctx->sg[0]);
 
 
-	ahash_request_set_crypt(areq, &sha_ctx->tmp_sg, &sha_ctx->digest[0],
-						sha_ctx->trailing_buf_len);
-	sha_ctx->last_blk = 1;
+	ahash_request_set_crypt(areq, &rctx->sg[0], &rctx->digest[0],
+						rctx->trailing_buf_len);
+	rctx->last_blk = 1;
 
 	ret =  _qcrypto_queue_req(cp, sha_ctx->pengine, &areq->base);
 
