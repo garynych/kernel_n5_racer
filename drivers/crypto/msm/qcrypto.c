@@ -3001,8 +3001,11 @@ static int _sha1_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
 							unsigned int len)
 {
 	struct qcrypto_sha_ctx *sha_ctx = crypto_tfm_ctx(&tfm->base);
+<<
+
 	memset(&sha_ctx->authkey[0], 0, SHA1_BLOCK_SIZE);
-	if (len <= SHA1_BLOCK_SIZE) {
+	if (len <= SHA1_BLOCK_SIZE)
+>>>
 		memcpy(&sha_ctx->authkey[0], key, len);
 		sha_ctx->authkey_in_len = len;
 	} else {
@@ -3020,7 +3023,9 @@ static int _sha256_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
 	struct qcrypto_sha_ctx *sha_ctx = crypto_tfm_ctx(&tfm->base);
 
 	memset(&sha_ctx->authkey[0], 0, SHA256_BLOCK_SIZE);
-	if (len <= SHA256_BLOCK_SIZE) {
+<
+	if (len <= SHA256_BLOCK_SIZE)
+
 		memcpy(&sha_ctx->authkey[0], key, len);
 		sha_ctx->authkey_in_len = len;
 	} else {
@@ -3872,9 +3877,9 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				(struct msm_bus_scale_pdata *)
 					cp->platform_support.bus_scale_table);
 		if (!pengine->bus_scale_handle) {
-
-			printk(KERN_ERR "%s not able to get bus scale\n",
-
+<<
+			pr_err("%s not able to get bus scale\n",
+>>>
 				__func__);
 			rc =  -ENOMEM;
 			goto err;
