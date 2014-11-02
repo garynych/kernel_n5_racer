@@ -2842,7 +2842,7 @@ unsigned long long task_delta_exec(struct task_struct *p)
 	return ns;
 }
 
-525a85e526/*
+/*
  * Return accounted runtime for the task.
  * In case the task is currently running, return the runtime plus current's
  * pending runtime that have not been accounted yet.
