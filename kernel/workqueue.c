@@ -76,11 +76,21 @@ enum {
 	WORKER_DIE		= 1 << 1,	/* die die die */
 	WORKER_IDLE		= 1 << 2,	/* is idle */
 	WORKER_PREP		= 1 << 3,	/* preparing to run works */
+
+	WORKER_REBIND		= 1 << 5,	/* mom is home, come back */
 	WORKER_CPU_INTENSIVE	= 1 << 6,	/* cpu intensive */
 	WORKER_UNBOUND		= 1 << 7,	/* worker is unbound */
 
-	WORKER_NOT_RUNNING	= WORKER_PREP | WORKER_UNBOUND |
+	WORKER_NOT_RUNNING	= WORKER_PREP | WORKER_REBIND | WORKER_UNBOUND |
 				  WORKER_CPU_INTENSIVE,
+
+	/* gcwq->trustee_state */
+	TRUSTEE_START		= 0,		/* start */
+	TRUSTEE_IN_CHARGE	= 1,		/* trustee in charge of gcwq */
+	TRUSTEE_BUTCHER		= 2,		/* butcher workers */
+	TRUSTEE_RELEASE		= 3,		/* release workers */
+	TRUSTEE_DONE		= 4,		/* trustee is done */
+
 
 	NR_WORKER_POOLS		= 2,		/* # worker pools per gcwq */
 
@@ -1520,14 +1530,19 @@ static void worker_enter_idle(struct worker *worker)
 	/* idle_list is LIFO */
 	list_add(&worker->entry, &pool->idle_list);
 
-	if (too_many_workers(pool) && !timer_pending(&pool->idle_timer))
-		mod_timer(&pool->idle_timer, jiffies + IDLE_WORKER_TIMEOUT);
+
+	if (likely(gcwq->trustee_state != TRUSTEE_DONE)) {
+		if (too_many_workers(pool) && !timer_pending(&pool->idle_timer))
+			mod_timer(&pool->idle_timer,
+				  jiffies + IDLE_WORKER_TIMEOUT);
+	} else
+		wake_up_all(&gcwq->trustee_wait);
 
 	/*
-	 * Sanity check nr_running.  Because gcwq_unbind_fn() releases
-	 * gcwq->lock between setting %WORKER_UNBOUND and zapping
-	 * nr_running, the warning may trigger spuriously.  Check iff
-	 * unbind is not in progress.
+	 * Sanity check nr_running.  Because trustee releases gcwq->lock
+	 * between setting %WORKER_UNBOUND and zapping nr_running, the
+	 * warning may trigger spuriously.  Check iff trustee is idle.
+
 	 */
 	WARN_ON_ONCE(!(gcwq->flags & GCWQ_DISASSOCIATED) &&
 		     pool->nr_workers == pool->nr_idle &&
@@ -1620,8 +1635,12 @@ __acquires(&gcwq->lock)
 }
 
 /*
- * Rebind an idle @worker to its CPU.  worker_thread() will test
- * list_empty(@worker->entry) before leaving idle and call this function.
+
+ * Function for worker->rebind_work used to rebind unbound busy workers to
+ * the associated cpu which is coming back online.  This is scheduled by
+ * cpu up but can race with other cpu hotplug operations and may be
+ * executed twice without intervening cpu down.
+
  */
 static void idle_worker_rebind(struct worker *worker)
 {
@@ -1797,13 +1816,10 @@ static struct worker *create_worker(struct worker_pool *pool)
 		set_user_nice(worker->task, HIGHPRI_NICE_LEVEL);
 
 	/*
-	 * Determine CPU binding of the new worker depending on
-	 * %GCWQ_DISASSOCIATED.  The caller is responsible for ensuring the
-	 * flag remains stable across this function.  See the comments
-	 * above the flag definition for details.
-	 *
-	 * As an unbound worker may later become a regular one if CPU comes
-	 * online, make sure every worker has %PF_THREAD_BOUND set.
+
+	 * An unbound worker will become a regular one if CPU comes online
+	 * later on.  Make sure every worker has PF_THREAD_BOUND set.
+
 	 */
 	if (!(gcwq->flags & GCWQ_DISASSOCIATED)) {
 		kthread_bind(worker->task, gcwq->cpu);
@@ -3671,9 +3687,92 @@ EXPORT_SYMBOL_GPL(work_busy);
  * gcwqs serve mix of short, long and very long running works making
  * blocked draining impractical.
  *
- * This is solved by allowing a gcwq to be disassociated from the CPU
- * running as an unbound one and allowing it to be reattached later if the
- * cpu comes back online.
+
+ * This is solved by allowing a gcwq to be detached from CPU, running it
+ * with unbound workers and allowing it to be reattached later if the cpu
+ * comes back online.  A separate thread is created to govern a gcwq in
+ * such state and is called the trustee of the gcwq.
+ *
+ * Trustee states and their descriptions.
+ *
+ * START	Command state used on startup.  On CPU_DOWN_PREPARE, a
+ *		new trustee is started with this state.
+ *
+ * IN_CHARGE	Once started, trustee will enter this state after
+ *		assuming the manager role and making all existing
+ *		workers rogue.  DOWN_PREPARE waits for trustee to
+ *		enter this state.  After reaching IN_CHARGE, trustee
+ *		tries to execute the pending worklist until it's empty
+ *		and the state is set to BUTCHER, or the state is set
+ *		to RELEASE.
+ *
+ * BUTCHER	Command state which is set by the cpu callback after
+ *		the cpu has went down.  Once this state is set trustee
+ *		knows that there will be no new works on the worklist
+ *		and once the worklist is empty it can proceed to
+ *		killing idle workers.
+ *
+ * RELEASE	Command state which is set by the cpu callback if the
+ *		cpu down has been canceled or it has come online
+ *		again.  After recognizing this state, trustee stops
+ *		trying to drain or butcher and clears ROGUE, rebinds
+ *		all remaining workers back to the cpu and releases
+ *		manager role.
+ *
+ * DONE		Trustee will enter this state after BUTCHER or RELEASE
+ *		is complete.
+ *
+ *          trustee                 CPU                draining
+ *         took over                down               complete
+ * START -----------> IN_CHARGE -----------> BUTCHER -----------> DONE
+ *                        |                     |                  ^
+ *                        | CPU is back online  v   return workers |
+ *                         ----------------> RELEASE --------------
+ */
+
+/**
+ * trustee_wait_event_timeout - timed event wait for trustee
+ * @cond: condition to wait for
+ * @timeout: timeout in jiffies
+ *
+ * wait_event_timeout() for trustee to use.  Handles locking and
+ * checks for RELEASE request.
+ *
+ * CONTEXT:
+ * spin_lock_irq(gcwq->lock) which may be released and regrabbed
+ * multiple times.  To be used by trustee.
+ *
+ * RETURNS:
+ * Positive indicating left time if @cond is satisfied, 0 if timed
+ * out, -1 if canceled.
+ */
+#define trustee_wait_event_timeout(cond, timeout) ({			\
+	long __ret = (timeout);						\
+	while (!((cond) || (gcwq->trustee_state == TRUSTEE_RELEASE)) &&	\
+	       __ret) {							\
+		spin_unlock_irq(&gcwq->lock);				\
+		__wait_event_timeout(gcwq->trustee_wait, (cond) ||	\
+			(gcwq->trustee_state == TRUSTEE_RELEASE),	\
+			__ret);						\
+		spin_lock_irq(&gcwq->lock);				\
+	}								\
+	gcwq->trustee_state == TRUSTEE_RELEASE ? -1 : (__ret);		\
+})
+
+/**
+ * trustee_wait_event - event wait for trustee
+ * @cond: condition to wait for
+ *
+ * wait_event() for trustee to use.  Automatically handles locking and
+ * checks for CANCEL request.
+ *
+ * CONTEXT:
+ * spin_lock_irq(gcwq->lock) which may be released and regrabbed
+ * multiple times.  To be used by trustee.
+ *
+ * RETURNS:
+ * 0 if @cond is satisfied, -1 if canceled.
+
  */
 
 /* claim manager positions of all pools */
@@ -3727,19 +3826,18 @@ static void gcwq_unbind_fn(struct work_struct *work)
 		pool->flags |= POOL_MANAGING_WORKERS;
 
 		list_for_each_entry(worker, &pool->idle_list, entry)
-			worker->flags |= WORKER_ROGUE;
+			worker->flags |= WORKER_UNBOUND;
 	}
 
 	for_each_busy_worker(worker, i, pos, gcwq)
-		worker->flags |= WORKER_ROGUE;
+		worker->flags |= WORKER_UNBOUND;
 
 	gcwq->flags |= GCWQ_DISASSOCIATED;
 
 	/*
-	 * Call schedule() so that we cross rq->lock and thus can
-	 * guarantee sched callbacks see the rogue flag.  This is
-	 * necessary as scheduler callbacks may be invoked from other
-	 * cpus.
+	 * Call schedule() so that we cross rq->lock and thus can guarantee
+	 * sched callbacks see the unbound flag.  This is necessary as
+	 * scheduler callbacks may be invoked from other cpus.
 	 */
 	spin_unlock_irq(&gcwq->lock);
 	schedule();
@@ -3759,7 +3857,17 @@ static void gcwq_unbind_fn(struct work_struct *work)
 	for_each_busy_worker(worker, i, pos, gcwq)
 		worker->flags |= WORKER_UNBOUND;
 
-	gcwq->flags |= GCWQ_DISASSOCIATED;
+
+			if (need_to_create_worker(pool)) {
+				spin_unlock_irq(&gcwq->lock);
+				worker = create_worker(pool, false);
+				spin_lock_irq(&gcwq->lock);
+				if (worker) {
+					worker->flags |= WORKER_UNBOUND;
+					start_worker(worker);
+				}
+			}
+		}
 
 	gcwq_release_assoc_and_unlock(gcwq);
 
@@ -3795,9 +3903,10 @@ static void gcwq_unbind_fn(struct work_struct *work)
 		 * rebinding is scheduled.  The morphing should
 		 * be atomic.
 		 */
-		worker_flags |= WORKER_REBIND;
-		worker_flags &= ~WORKER_ROGUE;
-		ACCESS_ONCE(worker->flags) = worker_flags;
+
+		worker->flags |= WORKER_REBIND;
+		worker->flags &= ~WORKER_UNBOUND;
+
 
 		/* queue rebind_work, wq doesn't matter, use the default one */
 		if (test_and_set_bit(WORK_STRUCT_PENDING_BIT,
