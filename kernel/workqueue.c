@@ -3706,7 +3706,45 @@ static void gcwq_unbind_fn(struct work_struct *work)
 
 	BUG_ON(gcwq->cpu != smp_processor_id());
 
-	gcwq_claim_assoc_and_lock(gcwq);
+
+	spin_lock_irq(&gcwq->lock);
+	/*
+	 * Claim the manager position and make all workers rogue.
+	 * Trustee must be bound to the target cpu and can't be
+	 * cancelled.
+	 */
+	BUG_ON(gcwq->cpu != smp_processor_id());
+	rc = trustee_wait_event(!gcwq_is_managing_workers(gcwq));
+	BUG_ON(rc < 0);
+
+	/*
+	 * We've claimed all manager positions.  Make all workers unbound
+	 * and set DISASSOCIATED.  Before this, all workers except for the
+	 * ones which are still executing works from before the last CPU
+	 * down must be on the cpu.  After this, they may become diasporas.
+	 */
+	for_each_worker_pool(pool, gcwq) {
+		pool->flags |= POOL_MANAGING_WORKERS;
+
+		list_for_each_entry(worker, &pool->idle_list, entry)
+			worker->flags |= WORKER_ROGUE;
+	}
+
+	for_each_busy_worker(worker, i, pos, gcwq)
+		worker->flags |= WORKER_ROGUE;
+
+	gcwq->flags |= GCWQ_DISASSOCIATED;
+
+	/*
+	 * Call schedule() so that we cross rq->lock and thus can
+	 * guarantee sched callbacks see the rogue flag.  This is
+	 * necessary as scheduler callbacks may be invoked from other
+	 * cpus.
+	 */
+	spin_unlock_irq(&gcwq->lock);
+	schedule();
+	spin_lock_irq(&gcwq->lock);
+
 
 	/*
 	 * We've claimed all manager positions.  Make all workers unbound
@@ -3805,13 +3843,15 @@ static int __cpuinit workqueue_cpu_up_callback(struct notifier_block *nfb,
 			if (pool->nr_workers)
 				continue;
 
-			worker = create_worker(pool);
-			if (!worker)
-				return NOTIFY_BAD;
 
-			spin_lock_irq(&gcwq->lock);
-			start_worker(worker);
-			spin_unlock_irq(&gcwq->lock);
+	case CPU_POST_DEAD:
+		gcwq->trustee_state = TRUSTEE_BUTCHER;
+		/* fall through */
+	case CPU_UP_CANCELED:
+		for_each_worker_pool(pool, gcwq) {
+			destroy_worker(pool->first_idle);
+			pool->first_idle = NULL;
+
 		}
 		break;
 
@@ -3876,7 +3916,6 @@ static int __devinit workqueue_cpu_down_callback(struct notifier_block *nfb,
 {
 	switch (action & ~CPU_TASKS_FROZEN) {
 	case CPU_DOWN_PREPARE:
-	case CPU_DYING:
 	case CPU_POST_DEAD:
 		return workqueue_cpu_callback(nfb, action, hcpu);
 	}
