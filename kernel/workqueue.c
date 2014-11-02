@@ -3882,17 +3882,9 @@ static void gcwq_release_management(struct global_cwq *gcwq)
  */
 
 
-static bool gcwq_has_idle_workers(struct global_cwq *gcwq)
 
-{
-	struct worker_pool *pool;
+static int __cpuinit trustee_thread(void *__gcwq)
 
-	spin_unlock_irq(&gcwq->lock);
-	for_each_worker_pool(pool, gcwq)
-		mutex_unlock(&pool->assoc_mutex);
-}
-
-static void gcwq_unbind_fn(struct work_struct *work)
 {
 	struct global_cwq *gcwq = get_gcwq(smp_processor_id());
 	struct worker_pool *pool;
@@ -3957,13 +3949,6 @@ static void gcwq_unbind_fn(struct work_struct *work)
 
 	gcwq_release_assoc_and_unlock(gcwq);
 
-	/*
-	 * Call schedule() so that we cross rq->lock and thus can guarantee
-	 * sched callbacks see the %WORKER_UNBOUND flag.  This is necessary
-	 * as scheduler callbacks may be invoked from other cpus.
-	 */
-	schedule();
-
 
 	gcwq_release_management(gcwq);
 
@@ -3986,33 +3971,55 @@ static int __cpuinit workqueue_cpu_up_callback(struct notifier_block *nfb,
 {
 	unsigned int cpu = (unsigned long)hcpu;
 	struct global_cwq *gcwq = get_gcwq(cpu);
-	struct worker_pool *pool;
 
-	switch (action & ~CPU_TASKS_FROZEN) {
+	struct task_struct *new_trustee = NULL;
+	struct worker_pool *pool;
+	unsigned long flags;
+
+	action &= ~CPU_TASKS_FROZEN;
+
+	switch (action) {
+	case CPU_DOWN_PREPARE:
+		new_trustee = kthread_create(trustee_thread, gcwq,
+					     "workqueue_trustee/%d\n", cpu);
+		if (IS_ERR(new_trustee))
+			return notifier_from_errno(PTR_ERR(new_trustee));
+		kthread_bind(new_trustee, cpu);
+		break;
+
 	case CPU_UP_PREPARE:
 		for_each_worker_pool(pool, gcwq) {
-
-			BUG_ON(pool->first_idle);
-			new_workers[i] = create_worker(pool);
-			if (!new_workers[i++])
-				goto err_destroy;
-		}
-	}
-
+			struct worker *worker;
 
 			if (pool->nr_workers)
 				continue;
 
+			worker = create_worker(pool);
+			if (!worker)
+				return NOTIFY_BAD;
+
+			spin_lock_irq(&gcwq->lock);
+			start_worker(worker);
+			spin_unlock_irq(&gcwq->lock);
+
+		}
+	}
+
+
+
+	switch (action) {
+	case CPU_DOWN_PREPARE:
+		/* initialize trustee and tell it to acquire the gcwq */
+		BUG_ON(gcwq->trustee || gcwq->trustee_state != TRUSTEE_DONE);
+		gcwq->trustee = new_trustee;
+		gcwq->trustee_state = TRUSTEE_START;
+		wake_up_process(gcwq->trustee);
+		wait_trustee_state(gcwq, TRUSTEE_IN_CHARGE);
+		break;
 
 	case CPU_POST_DEAD:
 		gcwq->trustee_state = TRUSTEE_BUTCHER;
-		/* fall through */
-	case CPU_UP_CANCELED:
-		for_each_worker_pool(pool, gcwq) {
-			destroy_worker(pool->first_idle);
-			pool->first_idle = NULL;
 
-		}
 		break;
 
 	case CPU_DOWN_FAILED:
@@ -4034,46 +4041,16 @@ static int __cpuinit workqueue_cpu_up_callback(struct notifier_block *nfb,
 
 		gcwq_release_management(gcwq);
 
-		/*
-		 * Trustee is done and there might be no worker left.
-		 * Put the first_idle in and request a real manager to
-		 * take a look.
-		 */
-		for_each_worker_pool(pool, gcwq) {
-			spin_unlock_irq(&gcwq->lock);
-			kthread_bind(pool->first_idle->task, cpu);
-			spin_lock_irq(&gcwq->lock);
-			pool->flags |= POOL_MANAGE_WORKERS;
-			pool->first_idle->flags &= ~WORKER_UNBOUND;
-			start_worker(pool->first_idle);
-			pool->first_idle = NULL;
-		}
-
 		break;
 	}
 	return NOTIFY_OK;
 }
 
-/*
- * Workqueues should be brought down after normal priority CPU notifiers.
- * This will be registered as low priority CPU notifier.
- */
-static int __cpuinit workqueue_cpu_down_callback(struct notifier_block *nfb,
-						 unsigned long action,
-						 void *hcpu)
-{
-	unsigned int cpu = (unsigned long)hcpu;
-	struct work_struct unbind_work;
 
-	switch (action & ~CPU_TASKS_FROZEN) {
-	case CPU_DOWN_PREPARE:
-		/* unbinding should happen on the local CPU */
-		INIT_WORK_ONSTACK(&unbind_work, gcwq_unbind_fn);
-		queue_work_on(cpu, system_highpri_wq, &unbind_work);
-		flush_work(&unbind_work);
-		break;
-	}
-	return NOTIFY_OK;
+	spin_unlock_irqrestore(&gcwq->lock, flags);
+
+	return notifier_from_errno(0);
+
 }
 
 /*
@@ -4086,7 +4063,6 @@ static int __devinit workqueue_cpu_up_callback(struct notifier_block *nfb,
 {
 	switch (action & ~CPU_TASKS_FROZEN) {
 	case CPU_UP_PREPARE:
-	case CPU_UP_CANCELED:
 	case CPU_DOWN_FAILED:
 	case CPU_ONLINE:
 		return workqueue_cpu_callback(nfb, action, hcpu);
