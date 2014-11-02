@@ -353,7 +353,6 @@ void kthread_bind(struct task_struct *p, unsigned int cpu)
 }
 EXPORT_SYMBOL(kthread_bind);
 
-}
 
 /**
  * kthread_create_on_cpu - Create a cpu bound kthread
