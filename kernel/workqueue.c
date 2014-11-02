@@ -61,7 +61,9 @@ enum {
 	 * be executing on any CPU.  The gcwq behaves as an unbound one.
 	 *
 	 * Note that DISASSOCIATED can be flipped only while holding
-	 * assoc_mutex of all pools on the gcwq to avoid changing binding
+
+	 * managership of all pools on the gcwq to avoid changing binding
+
 	 * state while create_worker() is in progress.
 	 */
 	GCWQ_DISASSOCIATED	= 1 << 0,	/* cpu can't serve workers */
@@ -1819,8 +1821,13 @@ static struct worker *create_worker(struct worker_pool *pool)
 
 	/*
 
-	 * An unbound worker will become a regular one if CPU comes online
-	 * later on.  Make sure every worker has PF_THREAD_BOUND set.
+	 * Determine CPU binding of the new worker depending on
+	 * %GCWQ_DISASSOCIATED.  The caller is responsible for ensuring the
+	 * flag remains stable across this function.  See the comments
+	 * above the flag definition for details.
+	 *
+	 * As an unbound worker may later become a regular one if CPU comes
+	 * online, make sure every worker has %PF_THREAD_BOUND set.
 
 	 */
 	if (!(gcwq->flags & GCWQ_DISASSOCIATED)) {
@@ -3865,12 +3872,10 @@ static void gcwq_unbind_fn(struct work_struct *work)
 
 			if (need_to_create_worker(pool)) {
 				spin_unlock_irq(&gcwq->lock);
-				worker = create_worker(pool, false);
+				worker = create_worker(pool);
 				spin_lock_irq(&gcwq->lock);
-				if (worker) {
-					worker->flags |= WORKER_UNBOUND;
+				if (worker)
 					start_worker(worker);
-				}
 			}
 		}
 
@@ -3897,6 +3902,10 @@ static void gcwq_unbind_fn(struct work_struct *work)
 	for_each_worker_pool(pool, gcwq)
 
 		WARN_ON(!list_empty(&pool->idle_list));
+
+	/* if we're reassociating, clear DISASSOCIATED */
+	if (gcwq->trustee_state == TRUSTEE_RELEASE)
+		gcwq->flags &= ~GCWQ_DISASSOCIATED;
 
 	for_each_busy_worker(worker, i, pos, gcwq) {
 		struct work_struct *rebind_work = &worker->rebind_work;
@@ -3950,7 +3959,14 @@ static int __cpuinit workqueue_cpu_up_callback(struct notifier_block *nfb,
 	switch (action & ~CPU_TASKS_FROZEN) {
 	case CPU_UP_PREPARE:
 		for_each_worker_pool(pool, gcwq) {
-			struct worker *worker;
+
+			BUG_ON(pool->first_idle);
+			new_workers[i] = create_worker(pool);
+			if (!new_workers[i++])
+				goto err_destroy;
+		}
+	}
+
 
 			if (pool->nr_workers)
 				continue;
@@ -3969,10 +3985,35 @@ static int __cpuinit workqueue_cpu_up_callback(struct notifier_block *nfb,
 
 	case CPU_DOWN_FAILED:
 	case CPU_ONLINE:
-		gcwq_claim_assoc_and_lock(gcwq);
+
+		if (gcwq->trustee_state != TRUSTEE_DONE) {
+			gcwq->trustee_state = TRUSTEE_RELEASE;
+			wake_up_process(gcwq->trustee);
+			wait_trustee_state(gcwq, TRUSTEE_DONE);
+		}
+
+		/*
+		 * Either DISASSOCIATED is already cleared or no worker is
+		 * left on the gcwq.  Safe to clear DISASSOCIATED without
+		 * claiming managers.
+		 */
 		gcwq->flags &= ~GCWQ_DISASSOCIATED;
-		rebind_workers(gcwq);
-		gcwq_release_assoc_and_unlock(gcwq);
+
+		/*
+		 * Trustee is done and there might be no worker left.
+		 * Put the first_idle in and request a real manager to
+		 * take a look.
+		 */
+		for_each_worker_pool(pool, gcwq) {
+			spin_unlock_irq(&gcwq->lock);
+			kthread_bind(pool->first_idle->task, cpu);
+			spin_lock_irq(&gcwq->lock);
+			pool->flags |= POOL_MANAGE_WORKERS;
+			pool->first_idle->flags &= ~WORKER_UNBOUND;
+			start_worker(pool->first_idle);
+			pool->first_idle = NULL;
+		}
+
 		break;
 	}
 	return NOTIFY_OK;
