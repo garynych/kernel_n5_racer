@@ -989,21 +989,15 @@ retry:
 	ibytes = nbytes;
 	if (have_bytes < min + reserved) {
 		ibytes = 0;
-	} else {
-		/* If limited, never pull more than available */
-		if (r->limit)
-			ibytes = min_t(size_t, ibytes, have_bytes - reserved);
-		entropy_count = max_t(int, 0,
-			    entropy_count - (ibytes << (ENTROPY_SHIFT + 3)));
-		if (cmpxchg(&r->entropy_count, orig, entropy_count) != orig)
-			goto retry;
 
-		if ((r->entropy_count >> ENTROPY_SHIFT)
-		    < random_write_wakeup_thresh)
-			wakeup_write = 1;
-	}
+	if (have_bytes >= ibytes + reserved)
+		entropy_count -= ibytes << (ENTROPY_SHIFT + 3);
+	else
+		entropy_count = reserved << (ENTROPY_SHIFT + 3);
 
-	spin_unlock_irqrestore(&r->lock, flags);
+	if (cmpxchg(&r->entropy_count, orig, entropy_count) != orig)
+		goto retry;
+
 
 	trace_debit_entropy(r->name, 8 * ibytes);
 	if (wakeup_write) {
