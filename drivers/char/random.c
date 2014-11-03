@@ -969,9 +969,7 @@ static void push_to_pool(struct work_struct *work)
 static size_t account(struct entropy_store *r, size_t nbytes, int min,
 		      int reserved)
 {
-	unsigned long flags;
-	int wakeup_write = 0;
-	int have_bytes;
+
 	int entropy_count, orig;
 	size_t ibytes;
 
@@ -985,15 +983,21 @@ static size_t account(struct entropy_store *r, size_t nbytes, int min,
 	/* Can we pull enough? */
 retry:
 	entropy_count = orig = ACCESS_ONCE(r->entropy_count);
-	have_bytes = entropy_count >> (ENTROPY_SHIFT + 3);
 	ibytes = nbytes;
-	if (have_bytes < min + reserved) {
-		ibytes = 0;
 
-	if (have_bytes >= ibytes + reserved)
-		entropy_count -= ibytes << (ENTROPY_SHIFT + 3);
-	else
-		entropy_count = reserved << (ENTROPY_SHIFT + 3);
+	/* If limited, never pull more than available */
+	if (r->limit) {
+		int have_bytes = entropy_count >> (ENTROPY_SHIFT + 3);
+
+		if ((have_bytes -= reserved) < 0)
+			have_bytes = 0;
+		ibytes = min_t(size_t, ibytes, have_bytes);
+	}
+	if (ibytes < min)
+		ibytes = 0;
+	if ((entropy_count -= ibytes << (ENTROPY_SHIFT + 3)) < 0)
+		entropy_count = 0;
+
 
 	if (cmpxchg(&r->entropy_count, orig, entropy_count) != orig)
 		goto retry;
