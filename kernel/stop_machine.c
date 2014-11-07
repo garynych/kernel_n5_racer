@@ -300,14 +300,14 @@ repeat:
 
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
 
+static void cpu_stop_create(unsigned int cpu)
+{
+	sched_set_stop_task(cpu, per_cpu(cpu_stopper_task, cpu));
+}
 
-/* manage stopper for a cpu, mostly lifted from sched migration thread mgmt */
-static int cpu_stop_cpu_callback(struct notifier_block *nfb,
-					   unsigned long action, void *hcpu)
-
+static void cpu_stop_park(unsigned int cpu)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
-
 	struct cpu_stop_work *work;
 	unsigned long flags;
 
@@ -319,15 +319,25 @@ static int cpu_stop_cpu_callback(struct notifier_block *nfb,
 	spin_unlock_irqrestore(&stopper->lock, flags);
 }
 
+static void cpu_stop_unpark(unsigned int cpu)
+{
+	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
 
-/*
- * Give it a higher priority so that cpu stopper is available to other
- * cpu notifiers.  It currently shares the same priority as sched
- * migration_notifier.
- */
-static struct notifier_block cpu_stop_cpu_notifier = {
-	.notifier_call	= cpu_stop_cpu_callback,
-	.priority	= 10,
+	spin_lock_irq(&stopper->lock);
+	stopper->enabled = true;
+	spin_unlock_irq(&stopper->lock);
+}
+
+static struct smp_hotplug_thread cpu_stop_threads = {
+	.store			= &cpu_stopper_task,
+	.thread_should_run	= cpu_stop_should_run,
+	.thread_fn		= cpu_stopper_thread,
+	.thread_comm		= "migration/%u",
+	.create			= cpu_stop_create,
+	.setup			= cpu_stop_unpark,
+	.park			= cpu_stop_park,
+	.pre_unpark		= cpu_stop_unpark,
+	.selfparking		= true,
 };
 
 static int __init cpu_stop_init(void)
