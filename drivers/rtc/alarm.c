@@ -525,7 +525,6 @@ static void alarm_shutdown(struct platform_device *dev)
 		pr_alarm(FLOW, "Power-on alarm set to %lu\n",
 				alarm_time);
 
-	spin_unlock_irqrestore(&alarm_slock, flags);
 	return;
 
 disable_alarm:
