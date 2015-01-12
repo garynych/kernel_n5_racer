@@ -1855,8 +1855,7 @@ static int _qcrypto_process_aead(struct  crypto_engine *pengine,
 
 	return ret;
 }
-#define list_next_entry(pos, member) \
-		list_entry(pos->member.next, typeof(*pos), member)
+
 static struct crypto_engine *_qcrypto_static_assign_engine(
 					struct crypto_priv *cp)
 {
@@ -3089,12 +3088,8 @@ static int __sha256_import_common(struct ahash_request  *req, const void *in,
 	rctx->byte_count[0] =  (uint32_t)(hw_count & 0xFFFFFFC0);
 	rctx->byte_count[1] =  (uint32_t)(hw_count >> 32);
 	_words_to_byte_stream(in_ctx->state, rctx->digest, sha_ctx->diglen);
-
- requests.
 	rctx->trailing_buf_len = (uint32_t)(in_ctx->count &
 						(SHA256_BLOCK_SIZE-1));
-
-
 	return 0;
 }
 
@@ -4392,9 +4387,7 @@ static int  _qcrypto_probe(struct platform_device *pdev)
 				(struct msm_bus_scale_pdata *)
 					cp->platform_support.bus_scale_table);
 		if (!pengine->bus_scale_handle) {
-<<
 			pr_err("%s not able to get bus scale\n",
->>>
 				__func__);
 			rc =  -ENOMEM;
 			goto err;
@@ -4911,3 +4904,4 @@ module_exit(_qcrypto_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Qualcomm Crypto driver");
+
