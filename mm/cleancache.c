@@ -214,6 +214,18 @@ static int cleancache_get_key(struct inode *inode,
 	}
 	return 0;
 }
+ 
+static int get_poolid_from_fake(int fake_pool_id)
+{
+     if (fake_pool_id >= FAKE_SHARED_FS_POOLID_OFFSET)
+         return shared_fs_poolid_map[fake_pool_id -
+             FAKE_SHARED_FS_POOLID_OFFSET];
+     else if (fake_pool_id >= FAKE_FS_POOLID_OFFSET)
+         return fs_poolid_map[fake_pool_id - FAKE_FS_POOLID_OFFSET];
+     return FS_NO_BACKEND;
+}
+ 
+
 
 /*
  * "Get" data from cleancache associated with the poolid/inode/index
@@ -291,6 +303,7 @@ void __cleancache_invalidate_page(struct address_space *mapping,
 {
 	/* careful... page->mapping is NULL sometimes when this is called */
 	int pool_id = mapping->host->i_sb->cleancache_poolid;
+	int fake_pool_id = mapping->host->i_sb->cleancache_poolid;
 	struct cleancache_filekey key = { .u.key = { 0 } };
 
 
@@ -320,6 +333,7 @@ EXPORT_SYMBOL(__cleancache_invalidate_page);
 void __cleancache_invalidate_inode(struct address_space *mapping)
 {
 	int pool_id = mapping->host->i_sb->cleancache_poolid;
+	int fake_pool_id = mapping->host->i_sb->cleancache_poolid;	
 	struct cleancache_filekey key = { .u.key = { 0 } };
 
 
