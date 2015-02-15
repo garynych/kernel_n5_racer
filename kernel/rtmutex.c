@@ -505,18 +505,6 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
 	 * which is wrong, as the other waiter is not in a deadlock
 	 * situation.
 	 */
-	if (owner == task)
-		return -EDEADLK;
-
-	/*
-	 * Early deadlock detection. We really don't want the task to
-	 * enqueue on itself just to untangle the mess later. It's not
-	 * only an optimization. We drop the locks, so another waiter
-	 * can come in before the chain walk detects the deadlock. So
-	 * the other will detect the deadlock and return -EDEADLOCK,
-	 * which is wrong, as the other waiter is not in a deadlock
-	 * situation.
-	 */
 	if (detect_deadlock && owner == task)
 		return -EDEADLK;
 
@@ -553,7 +541,6 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
 
 	/* Store the lock on which owner is blocked or NULL */
 	next_lock = task_blocked_on_lock(owner);
-
 	raw_spin_unlock_irqrestore(&owner->pi_lock, flags);
 	/*
 	 * Even if full deadlock detection is on, if the owner is not
