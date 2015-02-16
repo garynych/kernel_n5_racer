@@ -550,7 +550,7 @@ err_dec_ref_cnt:
 }
 
 
-static int qseecom_scale_bus_bandwidth_timer(uint32_t mode, uint32_t duration)
+static int qseecom_scale_bus_bandwidth_timer(uint32_t mode)
 {
 	int32_t ret = 0;
 	int32_t request_mode = INACTIVE;
@@ -691,14 +691,9 @@ static void __qseecom_disable_clk_scale_down(struct qseecom_dev_handle *data)
 {
 	if (!qseecom.support_bus_scaling)
 		qsee_disable_clock_vote(data, CLK_SFPB);
-	else {
-		mutex_lock(&qsee_bw_mutex);
-		qseecom.bw_scale_down_timer.expires = jiffies +
-			msecs_to_jiffies(QSEECOM_LOAD_APP_CRYPTO_TIMEOUT);
-		add_timer(&(qseecom.bw_scale_down_timer));
-		qseecom.timer_running = true;
-		mutex_unlock(&qsee_bw_mutex);
-	}
+	else
+		__qseecom_add_bw_scale_down_timer(
+			QSEECOM_LOAD_APP_CRYPTO_TIMEOUT);
 	return;
 }
 
@@ -1358,15 +1353,9 @@ static int qseecom_send_service_cmd(struct qseecom_dev_handle *data,
 			qsee_disable_clock_vote(data, CLK_DFAB);
 			qsee_disable_clock_vote(data, CLK_SFPB);
 		} else {
-			mutex_lock(&qsee_bw_mutex);
-			qseecom.bw_scale_down_timer.expires = jiffies +
-				msecs_to_jiffies(
+			__qseecom_add_bw_scale_down_timer(
 				QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
-			add_timer(&(qseecom.bw_scale_down_timer));
-			qseecom.timer_running = true;
-			mutex_unlock(&qsee_bw_mutex);
 		}
-
 		goto exit;
 	}
 
@@ -1394,12 +1383,8 @@ static int qseecom_send_service_cmd(struct qseecom_dev_handle *data,
 		qsee_disable_clock_vote(data, CLK_DFAB);
 		qsee_disable_clock_vote(data, CLK_SFPB);
 	} else {
-		mutex_lock(&qsee_bw_mutex);
-		qseecom.bw_scale_down_timer.expires = jiffies +
-			msecs_to_jiffies(QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
-		add_timer(&(qseecom.bw_scale_down_timer));
-		qseecom.timer_running = true;
-		mutex_unlock(&qsee_bw_mutex);
+		__qseecom_add_bw_scale_down_timer(
+			QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
 	}
 
 exit:
@@ -2461,14 +2446,9 @@ int qseecom_send_command(struct qseecom_handle *handle, void *send_buf,
 	}
 
 	ret = __qseecom_send_cmd(data, &req);
-	if (qseecom.support_bus_scaling) {
-		mutex_lock(&qsee_bw_mutex);
-		qseecom.bw_scale_down_timer.expires = jiffies +
-			msecs_to_jiffies(QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
-		add_timer(&(qseecom.bw_scale_down_timer));
-		qseecom.timer_running = true;
-		mutex_unlock(&qsee_bw_mutex);
-	}
+	if (qseecom.support_bus_scaling)
+		__qseecom_add_bw_scale_down_timer(
+			QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
 
 	if (perf_enabled) {
 		qsee_disable_clock_vote(data, CLK_DFAB);
@@ -3666,10 +3646,8 @@ static long qseecom_ioctl(struct file *file, unsigned cmd,
 		}
 		atomic_inc(&data->ioctl_count);
 		ret = qseecom_send_cmd(data, argp);
-		if (qseecom.support_bus_scaling) {
-			mutex_lock(&qsee_bw_mutex);
-			qseecom.bw_scale_down_timer.expires = jiffies +
-				msecs_to_jiffies(
+		if (qseecom.support_bus_scaling)
+			__qseecom_add_bw_scale_down_timer(
 				QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
 		if (perf_enabled) {
 			qsee_disable_clock_vote(data, CLK_DFAB);
@@ -3728,10 +3706,8 @@ static long qseecom_ioctl(struct file *file, unsigned cmd,
 		}
 		atomic_inc(&data->ioctl_count);
 		ret = qseecom_send_modfd_cmd(data, argp);
-		if (qseecom.support_bus_scaling) {
-			mutex_lock(&qsee_bw_mutex);
-			qseecom.bw_scale_down_timer.expires = jiffies +
-				msecs_to_jiffies(
+		if (qseecom.support_bus_scaling)
+			__qseecom_add_bw_scale_down_timer(
 				QSEECOM_SEND_CMD_CRYPTO_TIMEOUT);
 		if (perf_enabled) {
 			qsee_disable_clock_vote(data, CLK_DFAB);
