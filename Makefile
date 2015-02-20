@@ -345,17 +345,20 @@ KALLSYMS	= scripts/kallsyms
 PERL		= perl
 CHECK		= sparse
 
+# Use the wrapper for the compiler. This wrapper scans for new
+# warnings and causes the build to stop upon encountering them.
+# CC = $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)
+
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-KERNELFLAGS = -O3 -munaligned-access -fgcse-sm -fgcse-las -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad -funroll-loops -ftree-loop-im -ftree-loop-ivcanon -fmodulo-sched -fmodulo-sched-allow-regmoves -fivopts
-MODFLAGS = -DMODULE $(KERNELFLAGS)
-CFLAGS_MODULE = $(MODFLAGS)
-AFLAGS_MODULE = $(MODFLAGS)
-LDFLAGS_MODULE = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL = $(KERNELFLAGS)
-AFLAGS_KERNEL = $(KERNELFLAGS)
-CFLAGS_GCOV = -fprofile-arcs -ftest-coverage
-
+KERNELFLAGS = -O3 -munaligned-access -fgcse-sm -fgcse-las -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad -funroll-loops -ftree-loop-im -ftree-loop-ivcanon -fmodulo-sched -fmodulo-sched-allow-regmoves -fivopts -mneon-for-64bits -fopenmp -fopenmp-simd -fsimd-cost-model=unlimited -fgraphite -floop-nest-optimize
+MODFLAGS	= -DMODULE $(KERNELFLAGS)
+CFLAGS_MODULE 	= $(MODFLAGS)
+AFLAGS_MODULE 	= $(MODFLAGS)
+LDFLAGS_MODULE 	= -T $(srctree)/scripts/module-common.lds
+CFLAGS_KERNEL	= $(KERNELFLAGS)
+AFLAGS_KERNEL	= $(KERNELFLAGS)
+CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
@@ -366,21 +369,19 @@ LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include \
 
 KBUILD_CPPFLAGS := -D__KERNEL__
 
-KBUILD_CFLAGS := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
--fno-strict-aliasing -fno-common \
--Werror-implicit-function-declaration \
--Wno-format-security \
--fno-delete-null-pointer-checks \
--Wno-sizeof-pointer-memaccess \
-$(KERNELFLAGS)
-
+KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+		   -fno-strict-aliasing -fno-common \
+		   -Werror-implicit-function-declaration \
+		   -Wno-format-security \
+           -fno-delete-null-pointer-checks\
+		   -Wno-sizeof-pointer-memaccess \
+		   $(KERNELFLAGS)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
-
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
 KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(SUBLEVEL),.$(SUBLEVEL)))$(EXTRAVERSION)
