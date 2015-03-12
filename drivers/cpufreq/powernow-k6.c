@@ -48,6 +48,9 @@ static struct cpufreq_frequency_table clock_ratio[] = {
 	{0, CPUFREQ_TABLE_END}
 };
 
+static const u8 index_to_register[8] = { 6, 3, 1, 0, 2, 7, 5, 4 };
+static const u8 register_to_index[8] = { 3, 2, 4, 1, 7, 6, 0, 5 };
+
 static const struct {
 	unsigned freq;
 	unsigned mult;
@@ -80,17 +83,14 @@ static int powernow_k6_get_cpu_multiplier(void)
 {
 	unsigned long invalue = 0;
 	u32 msrval;
-
 	local_irq_disable();
-
 	msrval = POWERNOW_IOPORT + 0x1;
 	wrmsr(MSR_K6_EPMR, msrval, 0); /* enable the PowerNow port */
 	invalue = inl(POWERNOW_IOPORT + 0x8);
 	msrval = POWERNOW_IOPORT + 0x0;
 	wrmsr(MSR_K6_EPMR, msrval, 0); /* disable it again */
-
 	local_irq_enable();
-	return clock_ratio[(invalue >> 5)&7].index;
+	return clock_ratio[register_to_index[(invalue >> 5)&7]].index;
 }
 
 static void powernow_k6_set_cpu_multiplier(unsigned int best_i)
@@ -109,7 +109,7 @@ static void powernow_k6_set_cpu_multiplier(unsigned int best_i)
 	cr0 = read_cr0();
 	write_cr0(cr0 | X86_CR0_CD);
 	wbinvd();
-	outvalue = (1<<12) | (1<<10) | (1<<9) | (best_i<<5);
+	outvalue = (1<<12) | (1<<10) | (1<<9) | (index_to_register[best_i]<<5);
 	msrval = POWERNOW_IOPORT + 0x1;
 	wrmsr(MSR_K6_EPMR, msrval, 0); /* enable the PowerNow port */
 	invalue = inl(POWERNOW_IOPORT + 0x8);
@@ -118,7 +118,6 @@ static void powernow_k6_set_cpu_multiplier(unsigned int best_i)
 	outl(outvalue, (POWERNOW_IOPORT + 0x8));
 	msrval = POWERNOW_IOPORT + 0x0;
 	wrmsr(MSR_K6_EPMR, msrval, 0); /* disable it again */
-
 	write_cr0(cr0);
 	local_irq_enable();
 }
