@@ -48,9 +48,6 @@ static struct cpufreq_frequency_table clock_ratio[] = {
 	{0, CPUFREQ_TABLE_END}
 };
 
-static const u8 index_to_register[8] = { 6, 3, 1, 0, 2, 7, 5, 4 };
-static const u8 register_to_index[8] = { 3, 2, 4, 1, 7, 6, 0, 5 };
-
 static const struct {
 	unsigned freq;
 	unsigned mult;
