@@ -23,7 +23,6 @@
 #include "cpuidle.h"
 
 DEFINE_PER_CPU(struct cpuidle_device *, cpuidle_devices);
-DEFINE_PER_CPU(struct cpuidle_device, cpuidle_dev);
 
 DEFINE_MUTEX(cpuidle_lock);
 LIST_HEAD(cpuidle_detected_devices);
@@ -40,6 +39,17 @@ void disable_cpuidle(void)
 {
 	off = 1;
 }
+
+#if defined(CONFIG_ARCH_HAS_CPU_IDLE_WAIT)
+static void cpuidle_kick_cpus(void)
+{
+	cpu_idle_wait();
+}
+#elif defined(CONFIG_SMP)
+# error "Arch needs cpu_idle_wait() equivalent here"
+#else /* !CONFIG_ARCH_HAS_CPU_IDLE_WAIT && !CONFIG_SMP */
+static void cpuidle_kick_cpus(void) {}
+#endif
 
 static int __cpuidle_register_device(struct cpuidle_device *dev);
 
@@ -71,7 +81,7 @@ int cpuidle_play_dead(void)
 	struct cpuidle_device *dev = __this_cpu_read(cpuidle_devices);
 	struct cpuidle_driver *drv = cpuidle_get_driver();
 	int i, dead_state = -1;
-	int power_usage = INT_MAX;
+	int power_usage = -1;
 
 	if (!drv)
 		return -ENODEV;
@@ -154,23 +164,12 @@ int cpuidle_idle_call(void)
 	/* ask the governor for the next state */
 	next_state = cpuidle_curr_governor->select(drv, dev);
 	if (need_resched()) {
-		dev->last_residency = 0;
-		/* give the governor an opportunity to reflect on the outcome */
-		if (cpuidle_curr_governor->reflect)
-			cpuidle_curr_governor->reflect(dev, next_state);
 		local_irq_enable();
 		return 0;
 	}
 
 	trace_power_start_rcuidle(POWER_CSTATE, next_state, dev->cpu);
 	trace_cpu_idle_rcuidle(next_state, dev->cpu);
-
-	if (need_resched()) {
-		dev->last_residency = 0;
-		local_irq_enable();
-		entered_state = next_state;
-		goto exit;
-	}
 
 	if (cpuidle_state_is_coupled(dev, drv, next_state))
 		entered_state = cpuidle_enter_state_coupled(dev, drv,
@@ -179,8 +178,6 @@ int cpuidle_idle_call(void)
 		entered_state = cpuidle_enter_state(dev, drv, next_state);
 
 	trace_power_end_rcuidle(dev->cpu);
-
-exit:
 	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
 
 	/* give the governor an opportunity to reflect on the outcome */
@@ -209,7 +206,7 @@ void cpuidle_uninstall_idle_handler(void)
 {
 	if (enabled_devices) {
 		initialized = 0;
-		kick_all_cpus_sync();
+		cpuidle_kick_cpus();
 	}
 }
 
@@ -486,77 +483,6 @@ void cpuidle_unregister_device(struct cpuidle_device *dev)
 }
 
 EXPORT_SYMBOL_GPL(cpuidle_unregister_device);
-
-/*
- * cpuidle_unregister: unregister a driver and the devices. This function
- * can be used only if the driver has been previously registered through
- * the cpuidle_register function.
- *
- * @drv: a valid pointer to a struct cpuidle_driver
- */
-void cpuidle_unregister(struct cpuidle_driver *drv)
-{
-	int cpu;
-	struct cpuidle_device *device;
-
-	for_each_possible_cpu(cpu) {
-		device = &per_cpu(cpuidle_dev, cpu);
-		cpuidle_unregister_device(device);
-	}
-
-	cpuidle_unregister_driver(drv);
-}
-EXPORT_SYMBOL_GPL(cpuidle_unregister);
-
-/**
- * cpuidle_register: registers the driver and the cpu devices with the
- * coupled_cpus passed as parameter. This function is used for all common
- * initialization pattern there are in the arch specific drivers. The
- * devices is globally defined in this file.
- *
- * @drv         : a valid pointer to a struct cpuidle_driver
- * @coupled_cpus: a cpumask for the coupled states
- *
- * Returns 0 on success, < 0 otherwise
- */
-int cpuidle_register(struct cpuidle_driver *drv,
-		     const struct cpumask *const coupled_cpus)
-{
-	int ret, cpu;
-	struct cpuidle_device *device;
-
-	ret = cpuidle_register_driver(drv);
-	if (ret) {
-		pr_err("failed to register cpuidle driver\n");
-		return ret;
-	}
-
-	for_each_possible_cpu(cpu) {
-		device = &per_cpu(cpuidle_dev, cpu);
-		device->cpu = cpu;
-
-#ifdef CONFIG_ARCH_NEEDS_CPU_IDLE_COUPLED
-		/*
-		 * On multiplatform for ARM, the coupled idle states could
-		 * enabled in the kernel even if the cpuidle driver does not
-		 * use it. Note, coupled_cpus is a struct copy.
-		 */
-		if (coupled_cpus)
-			device->coupled_cpus = *coupled_cpus;
-#endif
-		ret = cpuidle_register_device(device);
-		if (!ret)
-			continue;
-
-		pr_err("Failed to register cpuidle device for cpu%d\n", cpu);
-
-		cpuidle_unregister(drv);
-		break;
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(cpuidle_register);
 
 #ifdef CONFIG_SMP
 
