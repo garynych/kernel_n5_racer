@@ -37,7 +37,6 @@
  */
 #define MAX_255_COUNT      ((((size_t)~0) / 255) - 2)
 
-
 int lzo1x_decompress_safe(const unsigned char *in, size_t in_len,
 			  unsigned char *out, size_t *out_len)
 {
@@ -73,7 +72,6 @@ int lzo1x_decompress_safe(const unsigned char *in, size_t in_len,
 
 					while (unlikely(*ip == 0)) {
 						ip++;
-
 						NEED_IP(1);
 					}
 					offset = ip - ip_last;
@@ -149,12 +147,14 @@ copy_literal_run:
 
 					NEED_IP(1);
 				}
+
 				offset = ip - ip_last;
 				if (unlikely(offset > MAX_255_COUNT))
 					return LZO_E_ERROR;
 
 				offset = (offset << 8) - offset;
 				t += offset + 31 + *ip++;
+
 				NEED_IP(2);
 			}
 			m_pos = op - 1;
@@ -175,12 +175,14 @@ copy_literal_run:
 
 					NEED_IP(1);
 				}
+
 				offset = ip - ip_last;
 				if (unlikely(offset > MAX_255_COUNT))
 					return LZO_E_ERROR;
 
 				offset = (offset << 8) - offset;
 				t += offset + 7 + *ip++;
+
 				NEED_IP(2);
 			}
 			next = get_unaligned_le16(ip);
