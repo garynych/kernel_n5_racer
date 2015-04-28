@@ -200,6 +200,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
 	int rc = 0;	
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct mdss_panel_info *pinfo = NULL;
 
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
 #if defined(CONFIG_TOUCHSCREEN_SWEEP2WAKE) || defined(CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE)
@@ -244,7 +245,9 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		if (mdss_panel_id == PANEL_LGE_JDI_ORISE_VIDEO ||
 			mdss_panel_id == PANEL_LGE_JDI_ORISE_CMD ||
 			mdss_panel_id == PANEL_LGE_JDI_NOVATEK_VIDEO ||
-			mdss_panel_id == PANEL_LGE_JDI_NOVATEK_CMD) {
+			mdss_panel_id == PANEL_LGE_JDI_NOVATEK_CMD) 
+			
+		if (!pinfo->cont_splash_enabled){
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
 			usleep(20 * 1000);
