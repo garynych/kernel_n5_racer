@@ -38,6 +38,7 @@
 
 #include "mdss_dsi.h"
 
+
 #define DT_CMD_HDR 6
 #define GAMMA_COMPAT 11
 
@@ -232,6 +233,7 @@ disp_en_gpio_err:
 
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
+	int rc = 0;	
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
@@ -272,7 +274,6 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 	}
 
 	pr_debug("%s: enable = %d\n", __func__, enable);
-	pinfo = &(ctrl_pdata->panel_data.panel_info);
 
 	if (enable) {
 		rc = mdss_dsi_request_gpios(ctrl_pdata);
