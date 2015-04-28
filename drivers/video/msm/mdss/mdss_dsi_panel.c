@@ -48,6 +48,8 @@ static struct kobject *module_kobj;
 
 static DEFINE_MUTEX(panel_cmd_mutex);
 
+static int mdss_panel_id = PANEL_QCOM;
+
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
 #if defined(CONFIG_BACKLIGHT_LM3630) && defined(CONFIG_MACH_LGE)
