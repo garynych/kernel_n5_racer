@@ -247,9 +247,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			mdss_panel_id == PANEL_LGE_JDI_NOVATEK_VIDEO ||
 			mdss_panel_id == PANEL_LGE_JDI_NOVATEK_CMD) 
 			
-		if (!pinfo->cont_splash_enabled){
+			{
+			if (!pinfo->cont_splash_enabled)
+			{
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+			gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
 			usleep(20 * 1000);
 			gpio_set_value((ctrl_pdata->rst_gpio), 1);
 			usleep(15 * 1000);
@@ -257,6 +259,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			udelay(20);
 			gpio_set_value((ctrl_pdata->rst_gpio), 1);
 			usleep(10 * 1000);
+			}
 		} else {
 			gpio_set_value((ctrl_pdata->rst_gpio), 1);
 			msleep(20);
